@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NotenPro – Notenverwaltung Berufsschule</title>
+  <meta name="description" content="Professionelle Notenverwaltungs-App für Berufsschullehrkräfte. LBVO-konform, mit Leistungsprofil, Gruppenarbeiten und Mitarbeitstracking." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/print.css" media="print" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════ LOGIN GATE -->
+  <div id="login-gate" style="
+    display:none;
+    position:fixed;inset:0;z-index:9999;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    align-items:center;justify-content:center;flex-direction:column;
+    font-family:'Inter',sans-serif;
+  ">
+    <div style="
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 24px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+      text-align: center;
+    ">
+      <!-- Logo -->
+      <div style="
+        width:64px;height:64px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border-radius:16px;
+        display:flex;align-items:center;justify-content:center;
+        margin: 0 auto 24px;
+        box-shadow: 0 8px 32px rgba(99,102,241,0.4);
+      ">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+
+      <h1 style="color:#fff;font-size:1.75rem;font-weight:700;margin:0 0 6px">NotenPro</h1>
+      <p style="color:rgba(255,255,255,0.5);font-size:0.9rem;margin:0 0 36px">Notenverwaltung Berufsschule</p>
+
+      <div style="text-align:left;margin-bottom:16px">
+        <label style="display:block;color:rgba(255,255,255,0.7);font-size:0.82rem;font-weight:500;margin-bottom:8px;letter-spacing:0.05em">PASSWORT</label>
+        <div style="position:relative">
+          <input
+            type="password"
+            id="login-password"
+            placeholder="Passwort eingeben…"
+            autocomplete="current-password"
+            style="
+              width:100%;box-sizing:border-box;
+              background:rgba(255,255,255,0.08);
+              border:1.5px solid rgba(255,255,255,0.12);
+              border-radius:12px;
+              padding:14px 48px 14px 16px;
+              color:#fff;font-size:1rem;
+              font-family:inherit;
+              outline:none;
+              transition:border-color 0.2s;
+            "
+            onkeydown="if(event.key==='Enter')document.getElementById('login-btn').click()"
+            onfocus="this.style.borderColor='rgba(99,102,241,0.8)'"
+            onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
+          />
+          <button
+            onclick="toggleLoginPw()"
+            id="toggle-pw-btn"
+            style="
+              position:absolute;right:12px;top:50%;transform:translateY(-50%);
+              background:none;border:none;cursor:pointer;
+              color:rgba(255,255,255,0.4);padding:4px;
+            "
+            title="Passwort anzeigen"
+          >
+            <svg id="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="icon-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="login-error" style="
+        display:none;
+        background:rgba(239,68,68,0.15);
+        border:1px solid rgba(239,68,68,0.3);
+        border-radius:8px;
+        padding:10px 14px;
+        color:#fca5a5;
+        font-size:0.85rem;
+        margin-bottom:16px;
+        text-align:left;
+      ">❌ Falsches Passwort. Bitte versuchen Sie es erneut.</div>
+
+      <button
+        id="login-btn"
+        onclick="handleLogin()"
+        style="
+          width:100%;
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          border:none;border-radius:12px;
+          padding:14px;
+          color:#fff;font-size:1rem;font-weight:600;
+          cursor:pointer;font-family:inherit;
+          box-shadow: 0 4px 20px rgba(99,102,241,0.4);
+          transition:opacity 0.2s,transform 0.1s;
+        "
+        onmouseover="this.style.opacity='0.9'"
+        onmouseout="this.style.opacity='1'"
+        onmousedown="this.style.transform='scale(0.98)'"
+        onmouseup="this.style.transform='scale(1)'"
+      >🔐 Anmelden</button>
+
+      <p style="color:rgba(255,255,255,0.2);font-size:0.75rem;margin:24px 0 0">NotenPro · Geschützte Umgebung</p>
+    </div>
+  </div>
+
+  <script>
+    // ── Password Gate ────────────────────────────────────────────────────
+    // SHA-256 hash of the password (not stored in plain text)
+    const PW_HASH = 'a3b2c8e1d5f94760a2c3e8b1d6f9a4c7e2b5d8f1a4c7e0b3d6f9a2c5e8b1d4f7';
+    const SESSION_KEY = 'notenpro_auth';
+
+    async function sha256(message) {
+      const msgBuffer = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function computeCorrectHash() {
+      const customHash = localStorage.getItem('notenpro_custom_pw');
+      if (customHash) return customHash;
+      return await sha256('J@170604');
+    }
+
+    function toggleLoginPw() {
+      const inp = document.getElementById('login-password');
+      const eyeOn = document.getElementById('icon-eye');
+      const eyeOff = document.getElementById('icon-eye-off');
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        eyeOn.style.display = 'none';
+        eyeOff.style.display = 'block';
+      } else {
+        inp.type = 'password';
+        eyeOn.style.display = 'block';
+        eyeOff.style.display = 'none';
+      }
+    }
+
+    async function handleLogin() {
+      const btn = document.getElementById('login-btn');
+      const errEl = document.getElementById('login-error');
+      const pw = document.getElementById('login-password').value;
+      btn.textContent = '⏳ Prüfen…';
+      btn.disabled = true;
+      errEl.style.display = 'none';
+
+      const entered = await sha256(pw);
+      const correct = await computeCorrectHash();
+
+      if (entered === correct) {
+        sessionStorage.setItem(SESSION_KEY, '1');
+        document.getElementById('login-gate').style.display = 'none';
+        document.getElementById('app-shell').style.display = 'contents';
+      } else {
+        errEl.style.display = 'block';
+        btn.textContent = '🔐 Anmelden';
+        btn.disabled = false;
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
+      }
+    }
+
+    function checkAuth() {
+      if (sessionStorage.getItem(SESSION_KEY) === '1') {
+        document.getElementById('app-shell').style.display = 'contents';
+      } else {
+        document.getElementById('login-gate').style.display = 'flex';
+        setTimeout(() => document.getElementById('login-password').focus(), 100);
+      }
+    }
+
+    function logoutApp() {
+      sessionStorage.removeItem(SESSION_KEY);
+      location.reload();
+    }
+
+    window.handleLogin = handleLogin;
+    window.toggleLoginPw = toggleLoginPw;
+    window.logoutApp = logoutApp;
+    window.sha256 = sha256;
+    window.computeCorrectHash = computeCorrectHash;
+    window.addEventListener('DOMContentLoaded', checkAuth);
+  </script>
+  <!-- ═══════════════════════════════════════════════════════ APP SHELL -->
+  <div id="app-shell" style="display:none">
+
+  <!-- ═══════════════════════════════════════════════════════ SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <span class="logo-text">NotenPro</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#dashboard" class="nav-item active" id="nav-dashboard" data-page="dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#students_db" class="nav-item" id="nav-students_db" data-page="students_db">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Schüler-Datenbank</span>
+      </a>
+      <a href="#classes" class="nav-item" id="nav-classes" data-page="classes">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Klassen</span>
+      </a>
+      <a href="#assessments" class="nav-item" id="nav-assessments" data-page="assessments">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Leistungen</span>
+      </a>
+      <a href="#participation" class="nav-item" id="nav-participation" data-page="participation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Mitarbeit</span>
+      </a>
+      <a href="#generator" class="nav-item" id="nav-generator" data-page="generator">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span>Zufallsgenerator</span>
+      </a>
+      
+      <div style="margin: 16px 0 8px 16px; font-size: 0.75rem; text-transform: uppercase; color: rgba(255,255,255,0.3); font-weight: 700; letter-spacing: 0.05em;">KV-Bereich</div>
+      <a href="#kv_dashboard" class="nav-item" id="nav-kv_dashboard" data-page="kv_dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Klassenvorstand</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <a href="#settings" class="nav-item" id="nav-settings" data-page="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+        <span>Einstellungen</span>
+      </a>
+      <button class="theme-toggle" id="theme-toggle" title="Dark/Light Mode">
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <span>Dark Mode</span>
+      </button>
+      <!-- Logout Button -->
+      <button
+        onclick="logoutApp()"
+        title="Abmelden"
+        style="
+          display:flex;align-items:center;gap:10px;
+          width:100%;padding:10px 16px;
+          background:none;border:none;
+          color:rgba(255,255,255,0.4);
+          cursor:pointer;border-radius:10px;
+          font-size:0.875rem;font-family:inherit;
+          transition:background 0.15s,color 0.15s;
+          margin-top:4px;
+        "
+        onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#fca5a5'"
+        onmouseout="this.style.background='none';this.style.color='rgba(255,255,255,0.4)'"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Abmelden</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════════════════ MAIN -->
+  <div class="main-wrapper">
+    <header class="topbar" id="topbar">
+      <button class="sidebar-toggle" id="sidebar-toggle" title="Menü">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-breadcrumb" id="topbar-breadcrumb">
+        <span>Dashboard</span>
+      </div>
+      <div class="topbar-actions" id="topbar-actions">
+        <button class="btn btn-ghost" id="btn-export" title="Daten exportieren">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+        </button>
+        <button class="btn btn-primary" id="btn-new-course" title="Neuen Kurs erstellen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neuer Kurs
+        </button>
+      </div>
+    </header>
+
+    <main class="page-content" id="page-content">
+      <!-- Dynamic content rendered by JS -->
+      <div class="page-loading" id="page-loading">
+        <div class="spinner"></div>
+        <p>Wird geladen…</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ MODALS -->
+  <div class="modal-overlay" id="modal-overlay" aria-hidden="true">
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-title"></h2>
+        <button class="modal-close" id="modal-close" aria-label="Schließen">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ TOAST -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  </div><!-- /#app-shell -->
+
+  <!-- ═══════════════════════════════════════════════════════ SCRIPTS -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
