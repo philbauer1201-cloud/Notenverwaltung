@@ -13,6 +13,8 @@
 </head>
 <body>
 
+
+
   <!-- ═══════════════════════════════════════════════════════ LOGIN GATE -->
   <div id="login-gate" style="
     display:none;
@@ -171,7 +173,7 @@
       if (entered === correct) {
         sessionStorage.setItem(SESSION_KEY, '1');
         document.getElementById('login-gate').style.display = 'none';
-        document.getElementById('app-shell').style.display = 'contents';
+        document.getElementById('app-shell').style.cssText = 'display:flex;flex:1;min-height:0;';
       } else {
         errEl.style.display = 'block';
         btn.textContent = '🔐 Anmelden';
@@ -183,7 +185,7 @@
 
     function checkAuth() {
       if (sessionStorage.getItem(SESSION_KEY) === '1') {
-        document.getElementById('app-shell').style.display = 'contents';
+        document.getElementById('app-shell').style.cssText = 'display:flex;flex:1;min-height:0;';
       } else {
         document.getElementById('login-gate').style.display = 'flex';
         setTimeout(() => document.getElementById('login-password').focus(), 100);
@@ -203,7 +205,7 @@
     window.addEventListener('DOMContentLoaded', checkAuth);
   </script>
   <!-- ═══════════════════════════════════════════════════════ APP SHELL -->
-  <div id="app-shell" style="display:none">
+  <div id="app-shell" style="display:none;flex:1;min-height:0;">
 
   <!-- ═══════════════════════════════════════════════════════ SIDEBAR -->
   <aside class="sidebar" id="sidebar">

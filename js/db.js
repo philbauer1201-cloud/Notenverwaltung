@@ -7,128 +7,67 @@ const DB_KEY = 'notenpro_v1';
 
 // ── Default / Seed Data ─────────────────────────────────────────
 function createDefaultData() {
+  const cat1 = uid(), cat2 = uid();
+  const categories = [
+    { id: cat1, name: 'Mündliche Mitarbeit', weight: 50, type: 'participation' },
+    { id: cat2, name: 'Schriftliche Prüfung', weight: 50 }
+  ];
+
+  const s1 = uid(), s2 = uid(), s3 = uid(), s4 = uid(), s5 = uid();
+  const students = [
+    { id: s1, firstName: 'Max', lastName: 'Mustermann' },
+    { id: s2, firstName: 'Laura', lastName: 'Huber' },
+    { id: s3, firstName: 'Felix', lastName: 'Müller' },
+    { id: s4, firstName: 'Anna', lastName: 'Schmidt' },
+    { id: s5, firstName: 'Tom', lastName: 'Kowalski' }
+  ];
+
+  const course1A = uid();
+  const course1B = uid();
+
+  const courses = [
+    {
+      id: course1A,
+      name: 'Klasse 1A',
+      subject: 'Allgemein',
+      schoolYear: '2025/26',
+      lehrgang: 1,
+      categories: JSON.parse(JSON.stringify(categories)),
+      dimensionTemplate: [],
+      cutScores: { sehrGut: 91, gut: 80, befriedigend: 66, genuegend: 50 },
+      participationCutScores: { sehrGut: 0.7, gut: 0.3, genuegend: -0.3, nichtGenuegend: -0.7 },
+      studentIds: [s1, s2, s3, s4],
+      assessments: [],
+      groups: [],
+      participationRecords: [],
+      finalGrades: [],
+      savedGroupConfigs: []
+    },
+    {
+      id: course1B,
+      name: 'Klasse 1B',
+      subject: 'Allgemein',
+      schoolYear: '2025/26',
+      lehrgang: 1,
+      categories: JSON.parse(JSON.stringify(categories)),
+      dimensionTemplate: [],
+      cutScores: { sehrGut: 91, gut: 80, befriedigend: 66, genuegend: 50 },
+      participationCutScores: { sehrGut: 0.7, gut: 0.3, genuegend: -0.3, nichtGenuegend: -0.7 },
+      studentIds: [s5],
+      assessments: [],
+      groups: [],
+      participationRecords: [],
+      finalGrades: [],
+      savedGroupConfigs: []
+    }
+  ];
+
   return {
     version: 1,
     settings: { theme: 'dark', lastCourseId: null },
-    students: [],
+    students: students,
     kvClasses: [],
-    courses: [
-      createSeedCourse()
-    ]
-  };
-}
-
-function createSeedCourse() {
-  const courseId = uid();
-  const cat1 = uid(), cat2 = uid(), cat3 = uid(), cat4 = uid();
-  const s1 = uid(), s2 = uid(), s3 = uid(), s4 = uid(), s5 = uid();
-  const a1 = uid(), a2 = uid(), a3 = uid();
-
-  return {
-    id: courseId,
-    name: '3A – Rechnungswesen',
-    subject: 'Rechnungswesen',
-    schoolYear: '2025/26',
-    lehrgang: 1,
-    categories: [
-      { id: cat1, name: 'Schularbeit',        weight: 40 },
-      { id: cat2, name: 'Extemporale',         weight: 20 },
-      { id: cat3, name: 'Mündliche Mitarbeit', weight: 20, type: 'participation' },
-      { id: cat4, name: 'Praxisarbeit',        weight: 20 }
-    ],
-    dimensionTemplate: [
-      { id: uid(), name: 'Fachliche Richtigkeit', maxPoints: 15 },
-      { id: uid(), name: 'Selbstständigkeit',      maxPoints: 10 },
-      { id: uid(), name: 'Darstellung',            maxPoints: 5  }
-    ],
-    cutScores: { sehrGut: 91, gut: 80, befriedigend: 66, genuegend: 50 },
-    participationCutScores: { sehrGut: 0.7, gut: 0.3, genuegend: -0.3, nichtGenuegend: -0.7 },
-    students: [
-      { id: s1, firstName: 'Anna',   lastName: 'Berger'   },
-      { id: s2, firstName: 'Lukas',  lastName: 'Huber'    },
-      { id: s3, firstName: 'Sara',   lastName: 'Gruber'   },
-      { id: s4, firstName: 'Tobias', lastName: 'Mayer'    },
-      { id: s5, firstName: 'Julia',  lastName: 'Schneider'}
-    ],
-    assessments: [
-      {
-        id: a1,
-        courseId,
-        categoryId: cat1,
-        title: 'Schularbeit 1',
-        date: '2026-03-14',
-        scale: 30,
-        maxPoints: 30,
-        mode: 'simple',
-        dimensionConfig: null,
-        groupId: null,
-        results: [
-          { studentId: s1, totalPoints: 27, dimensionScores: [], comment: 'Sehr gute Leistung', isOverridden: false, overrideLevel: null },
-          { studentId: s2, totalPoints: 19, dimensionScores: [], comment: '',                   isOverridden: false, overrideLevel: null },
-          { studentId: s3, totalPoints: 23, dimensionScores: [], comment: '',                   isOverridden: false, overrideLevel: null },
-          { studentId: s4, totalPoints: 14, dimensionScores: [], comment: 'Häufige Hilfe benötigt', isOverridden: false, overrideLevel: null },
-          { studentId: s5, totalPoints: 25, dimensionScores: [], comment: '',                   isOverridden: false, overrideLevel: null }
-        ]
-      },
-      {
-        id: a2,
-        courseId,
-        categoryId: cat2,
-        title: 'Extemporale 1 – Buchungen',
-        date: '2026-04-03',
-        scale: 15,
-        maxPoints: 15,
-        mode: 'simple',
-        dimensionConfig: null,
-        groupId: null,
-        results: [
-          { studentId: s1, totalPoints: 14, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s2, totalPoints: 10, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s3, totalPoints: 12, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s4, totalPoints: 7,  dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s5, totalPoints: 13, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null }
-        ]
-      },
-      {
-        id: a3,
-        courseId,
-        categoryId: cat4,
-        title: 'Praxisprojekt – Jahresabschluss',
-        date: '2026-05-10',
-        scale: 45,
-        maxPoints: 45,
-        mode: 'simple',
-        dimensionConfig: null,
-        groupId: null,
-        results: [
-          { studentId: s1, totalPoints: 41, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s2, totalPoints: 28, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s3, totalPoints: 33, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s4, totalPoints: 22, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null },
-          { studentId: s5, totalPoints: 38, dimensionScores: [], comment: '', isOverridden: false, overrideLevel: null }
-        ]
-      }
-    ],
-    groups: [],
-    participationRecords: [
-      { id: uid(), courseId, date: '2026-03-01', ticks: [
-        { studentId: s1, tick: '+' }, { studentId: s2, tick: '~' },
-        { studentId: s3, tick: '+' }, { studentId: s4, tick: '-' },
-        { studentId: s5, tick: '+' }
-      ]},
-      { id: uid(), courseId, date: '2026-03-08', ticks: [
-        { studentId: s1, tick: '+' }, { studentId: s2, tick: '+' },
-        { studentId: s3, tick: '~' }, { studentId: s4, tick: '~' },
-        { studentId: s5, tick: '+' }
-      ]},
-      { id: uid(), courseId, date: '2026-03-15', ticks: [
-        { studentId: s1, tick: '~' }, { studentId: s2, tick: '-' },
-        { studentId: s3, tick: '+' }, { studentId: s4, tick: '-' },
-        { studentId: s5, tick: '~' }
-      ]}
-    ],
-    finalGrades: [],
-    savedGroupConfigs: []
+    courses: courses
   };
 }
 

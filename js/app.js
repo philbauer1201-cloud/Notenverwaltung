@@ -19,7 +19,6 @@ import { renderStudentsDashboard } from './ui/studentsDashboardView.js';
 
 // ── State ────────────────────────────────────────────────────────
 let _currentPage = null;
-let _modalStack  = [];
 
 // ── Init ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -72,15 +71,16 @@ document.addEventListener('DOMContentLoaded', () => {
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'dashboard';
   const [page, ...params] = hash.split('/');
+  renderUI(page, params);
+}
 
+// ── Central Render UI ────────────────────────────────────────────
+export function renderUI(page, params = []) {
   const content = document.getElementById('page-content');
   content.innerHTML = '';
 
   setActiveNav(page);
   resetTopbarActions();
-
-  // Restore default topbar button
-  document.getElementById('btn-new-course')?.removeEventListener('click', handleRoute);
 
   switch (page) {
     case 'dashboard':
