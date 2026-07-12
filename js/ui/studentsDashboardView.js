@@ -233,6 +233,27 @@ export function renderStudentsDashboard(container) {
       });
     });
 
+    // Attach listener for new student button
+    document.getElementById('btn-global-new-student')?.addEventListener('click', () => {
+      showModal('Neuen Schüler anlegen', `
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Vorname</label><input type="text" id="g-firstname" autofocus></div>
+          <div class="form-group"><label class="form-label">Nachname</label><input type="text" id="g-lastname"></div>
+        </div>
+      `, [
+        { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
+        { label: 'Anlegen', cls: 'btn-primary', onClick: async () => {
+          const fn = document.getElementById('g-firstname').value.trim();
+          const ln = document.getElementById('g-lastname').value.trim();
+          if (!fn || !ln) return showToast('Name fehlt', 'error');
+          createStudent(null, { firstName: fn, lastName: ln });
+          closeModal();
+          showToast('Schüler in Datenbank angelegt', 'success');
+          renderStudentsDashboard(container);
+        }}
+      ]);
+    });
+
     container.querySelectorAll('.btn-edit-global').forEach(btn => {
       btn.addEventListener('click', () => {
         const student = students.find(s => s.id === btn.dataset.id);
@@ -245,7 +266,6 @@ export function renderStudentsDashboard(container) {
 // ── Universal Zuweisung Modal (Individual and Bulk) ─────────────────
 function showZuweisungModal(studentIds, title, courses, kvClasses, onDone) {
   const isBulk = studentIds.length > 1;
-
 
   // For individual student, find current assignments
   let currentKV = null;
@@ -323,10 +343,8 @@ function showZuweisungModal(studentIds, title, courses, kvClasses, onDone) {
       studentIds.forEach(sid => {
         // Handle Course membership
         if (isBulk) {
-          // In bulk, we ADD to selected courses (we don't clear unselected ones unless specified, to avoid accidental loss)
           selectedCourses.forEach(cid => assignStudentToCourse(cid, sid));
         } else {
-          // In individual assign, we set exactly the checked ones
           courses.forEach(c => {
             const shouldBeIn = selectedCourses.includes(c.id);
             const isIn = (c.studentIds || []).includes(sid);
@@ -337,12 +355,9 @@ function showZuweisungModal(studentIds, title, courses, kvClasses, onDone) {
 
         // Handle KV Class membership
         if (selectedKV && selectedKV !== "none") {
-          // Remove from other KV classes
           kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
-          // Add to selected
           addStudentToKVClass(selectedKV, sid);
         } else if (selectedKV === "none" && !isBulk) {
-          // If individual and "none", clear KV assignment
           kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
         }
       });
@@ -352,30 +367,6 @@ function showZuweisungModal(studentIds, title, courses, kvClasses, onDone) {
       onDone();
     }}
   ], "modal-lg");
-}
-
-function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-  document.getElementById('btn-global-new-student')?.addEventListener('click', () => {
-    showModal('Neuen Schüler anlegen', `
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Vorname</label><input type="text" id="g-firstname" autofocus></div>
-        <div class="form-group"><label class="form-label">Nachname</label><input type="text" id="g-lastname"></div>
-      </div>
-    `, [
-      { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
-      { label: 'Anlegen', cls: 'btn-primary', onClick: async () => {
-        const fn = document.getElementById('g-firstname').value.trim();
-        const ln = document.getElementById('g-lastname').value.trim();
-        if (!fn || !ln) return showToast('Name fehlt', 'error');
-        const { createStudent } = await import('../db.js');
-        createStudent(null, { firstName: fn, lastName: ln });
-        closeModal();
-        showToast('Schüler in Datenbank angelegt', 'success');
-        renderStudentsDashboard(container);
-      }}
-    ]);
-  });
 }
 
 function showEditStudentGlobalModal(student, onDone) {
@@ -420,3 +411,4 @@ function showEditStudentGlobalModal(student, onDone) {
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function formatDateShort(iso) { if (!iso) return ''; const d = new Date(iso); return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`; }
+
