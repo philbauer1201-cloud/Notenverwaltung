@@ -3,7 +3,7 @@
  * Schüler-Tabelle, Schnelleingabe, Notenübersicht pro Kategorie
  */
 
-import { getCourse, createStudent, removeStudentFromCourse, getAssessments, exportCSV, getFinalGrade } from '../db.js';
+import { getCourse, createStudent, removeStudentFromCourse, getAssessments, exportCSV, getFinalGrade, getGlobalStudents, assignStudentToCourse } from '../db.js';
 import { computeStudentProfile, computeParticipationLevel, getResultLevel, gradeClass, GRADE_LABELS, formatPct } from '../grading.js';
 import { showToast, navigate, confirm, showModal, closeModal } from '../app.js';
 import { renderStudentModal } from './studentView.js';
@@ -375,22 +375,61 @@ function assessmentCard(assessment, course) {
 }
 
 // ── Add Student Modal ─────────────────────────────────────────────
+// ── Add Student Modal ─────────────────────────────────────────────
 function showAddStudentModal(courseId, onDone) {
+  const course = getCourse(courseId);
+  const globalStudents = getGlobalStudents() || [];
+  
+  // Filter out students who are already enrolled in this course
+  const currentStudentIds = course.studentIds || [];
+  const availableStudents = globalStudents.filter(s => !currentStudentIds.includes(s.id));
+  
+  // Sort available students by last name
+  availableStudents.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+
   showModal('Schüler hinzufügen', `
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Vorname</label>
-        <input type="text" id="inp-firstname" placeholder="z.B. Max" autofocus>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:2rem;max-height:60vh;overflow-y:auto;padding-right:0.4rem;">
+      
+      <!-- Left: Create new student -->
+      <div>
+        <div style="font-weight:700;font-size:1.3rem;margin-bottom:1rem;color:var(--text-bright);">✍️ Neuen Schüler anlegen</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Vorname</label>
+            <input type="text" id="inp-firstname" placeholder="z.B. Max" autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nachname</label>
+            <input type="text" id="inp-lastname" placeholder="z.B. Mustermann">
+          </div>
+        </div>
+        <div class="form-group mt-2">
+          <label class="form-label">Mehrere Schüler (optional, je Zeile)</label>
+          <textarea id="inp-bulk" rows="5" placeholder="Anna Berger&#10;Lukas Huber&#10;Sara Gruber"></textarea>
+          <div class="form-hint">Format: Vorname Nachname (eine Person pro Zeile)</div>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Nachname</label>
-        <input type="text" id="inp-lastname" placeholder="z.B. Mustermann">
+
+      <!-- Right: Select existing students from global DB -->
+      <div style="border-left:1px solid var(--border);padding-left:2rem;display:flex;flex-direction:column;gap:1rem;">
+        <div style="font-weight:700;font-size:1.3rem;color:var(--text-bright);">📂 Aus Datenbank auswählen</div>
+        
+        <input type="text" id="db-student-search" placeholder="Schüler suchen..." style="width:100%;padding:0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:0.5rem;font-size:1.15rem;">
+        
+        <div id="db-students-list" style="display:flex;flex-direction:column;gap:0.6rem;max-height:22rem;overflow-y:auto;padding-right:0.4rem;">
+          ${availableStudents.length === 0 
+            ? '<div style="color:var(--text-muted);font-size:1.1rem;padding:1rem 0;">Keine weiteren Schüler in der Datenbank vorhanden.</div>'
+            : availableStudents.map(s => {
+                const ageLabel = s.birthDate ? ` (${new Date().getFullYear() - new Date(s.birthDate).getFullYear()} J.)` : '';
+                return `
+                <label class="db-student-row" data-name="${(s.lastName||'').toLowerCase()} ${(s.firstName||'').toLowerCase()}" style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);font-size:1.15rem;">
+                  <input type="checkbox" class="db-student-select-cb" value="${s.id}" style="width:1.6rem;height:1.6rem;">
+                  <span style="font-weight:600;">${escHtml(s.lastName)}, ${escHtml(s.firstName)}${ageLabel}</span>
+                </label>`;
+              }).join('')}
+        </div>
       </div>
-    </div>
-    <div class="form-group mt-2">
-      <label class="form-label">Mehrere Schüler (optional, je Zeile)</label>
-      <textarea id="inp-bulk" rows="5" placeholder="Anna Berger&#10;Lukas Huber&#10;Sara Gruber"></textarea>
-      <div class="form-hint">Format: Vorname Nachname (eine Person pro Zeile)</div>
+
     </div>
   `, [
     { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
@@ -399,8 +438,19 @@ function showAddStudentModal(courseId, onDone) {
         const fn = document.getElementById('inp-firstname').value.trim();
         const ln = document.getElementById('inp-lastname').value.trim();
         const bulk = document.getElementById('inp-bulk').value.trim();
+        
+        // Selected from DB checkbox list
+        const selectedFromDb = [...document.querySelectorAll(".db-student-select-cb:checked")].map(cb => cb.value);
+        
         let added = 0;
 
+        // 1. Assign selected from DB
+        selectedFromDb.forEach(sid => {
+          assignStudentToCourse(courseId, sid);
+          added++;
+        });
+
+        // 2. Create new from textareas
         if (bulk) {
           bulk.split('\n').forEach(line => {
             const parts = line.trim().split(/\s+/);
@@ -414,8 +464,10 @@ function showAddStudentModal(courseId, onDone) {
         } else if (fn && ln) {
           createStudent(courseId, { firstName: fn, lastName: ln });
           added++;
-        } else {
-          showToast('Bitte Vor- und Nachname eingeben', 'error');
+        }
+
+        if (added === 0) {
+          showToast('Bitte Schüler auswählen oder neuen Namen eingeben', 'error');
           return;
         }
 
@@ -424,9 +476,24 @@ function showAddStudentModal(courseId, onDone) {
         onDone();
       }
     }
-  ]);
+  ], "modal-lg");
+
+  // Real-time search inside the DB select list
+  const searchInput = document.getElementById('db-student-search');
+  searchInput?.addEventListener('input', () => {
+    const query = searchInput.value.toLowerCase().trim();
+    document.querySelectorAll('.db-student-row').forEach(row => {
+      const name = row.dataset.name;
+      if (name.includes(query)) {
+        row.style.display = 'flex';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  });
 }
 
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function isAdult(birthDateString) {
   if (!birthDateString) return null;
   const today = new Date();

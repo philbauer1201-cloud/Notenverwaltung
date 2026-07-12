@@ -248,9 +248,9 @@ export function createCourse(data) {
     schoolYear: data.schoolYear || '2025/26',
     lehrgang: data.lehrgang || 1,
     categories: data.categories || [
-      { id: uid(), name: 'Schularbeit',        weight: 40 },
-      { id: uid(), name: 'Mündliche Mitarbeit', weight: 30, type: 'participation' },
-      { id: uid(), name: 'Praxisarbeit',        weight: 30 }
+      { id: uid(), name: 'Schularbeit',        weight: 50 },
+      { id: uid(), name: 'Mitarbeit',          weight: 20, type: 'participation' },
+      { id: uid(), name: 'Unterrichtsarbeit',  weight: 30 }
     ],
     dimensionTemplate: data.dimensionTemplate || [],
     cutScores: data.cutScores || { sehrGut: 91, gut: 81, befriedigend: 67, genuegend: 50 },
