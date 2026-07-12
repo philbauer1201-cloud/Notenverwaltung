@@ -1,4 +1,4 @@
-import { getGlobalStudents, updateStudent } from '../db.js';
+import { getGlobalStudents, updateStudent, getKVClasses, addStudentToKVClass, removeStudentFromKVClass, createStudent } from '../db.js';
 import { navigate, showModal, closeModal, showToast } from '../app.js';
 
 export function renderStudentsDashboard(container) {
@@ -52,7 +52,6 @@ export function renderStudentsDashboard(container) {
           return showToast("Spalten 'Nachname' und 'Vorname' wurden nicht gefunden.", "error");
         }
 
-        const { createStudent } = await import('../db.js');
         let newCount = 0;
         for (let i = 1; i < lines.length; i++) {
           const values = parseCSVLine(lines[i]);
@@ -86,10 +85,27 @@ export function renderStudentsDashboard(container) {
       }
     };
     reader.readAsText(file, "UTF-8");
-  })    // Sort by last name
+  });
+
+  const students = getGlobalStudents() || [];
+
+  if (students.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5; margin-bottom:16px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        <h3>Datenbank ist leer</h3>
+        <p>Sie haben noch keine Schüler im System angelegt. Fügen Sie Schüler hier oder in Ihren Fach-Kursen hinzu.</p>
+        <button class="btn btn-primary mt-4" id="empty-global-new-student">Schüler anlegen</button>
+      </div>
+    `;
+    container.querySelector('#empty-global-new-student')?.addEventListener('click', () => {
+      document.getElementById('btn-global-new-student').click();
+    });
+
+  } else {
+    // Sort by last name
     students.sort((a,b) => a.lastName.localeCompare(b.lastName));
 
-    const { getKVClasses, addStudentToKVClass, removeStudentFromKVClass } = await import('../db.js');
     const kvClasses = getKVClasses() || [];
 
     // Helper to find which KV class a student belongs to
