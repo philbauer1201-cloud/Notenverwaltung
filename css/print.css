@@ -2,15 +2,22 @@
    NotenPro – Druckansicht
    ═══════════════════════════════════════════════════════════════════ */
 @media print {
-  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { 
+    -webkit-print-color-adjust: exact !important; 
+    print-color-adjust: exact !important; 
+    color-adjust: exact !important;
+  }
 
   body {
     background: #fff !important;
     color: #000 !important;
     font-family: 'Inter', Arial, sans-serif;
-    font-size: 11pt;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
   }
 
+  /* Hide interactive element controls */
   .sidebar,
   .topbar,
   .topbar-actions,
@@ -20,57 +27,138 @@
   .nav-item,
   .theme-toggle,
   .sidebar-toggle,
-  [data-no-print] { display: none !important; }
+  #bulk-actions-container,
+  #select-all-students,
+  .student-select-checkbox,
+  .col-actions,
+  th:last-child, 
+  td:last-child,
+  [data-no-print] { 
+    display: none !important; 
+  }
 
-  .main-wrapper { margin-left: 0 !important; }
-  .page-content { padding: 0 !important; max-width: 100% !important; }
+  /* Full width container reset */
+  .main-wrapper { 
+    margin-left: 0 !important; 
+    padding: 0 !important;
+  }
+  .page-content { 
+    padding: 0 !important; 
+    max-width: 100% !important; 
+    background: #fff !important;
+  }
 
-  /* Print header */
+  /* Print header formatting */
   .print-header {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 2pt solid #333;
-    padding-bottom: 10pt;
-    margin-bottom: 16pt;
+    border-bottom: 2pt solid #000;
+    padding-bottom: 8pt;
+    margin-bottom: 15pt;
   }
-  .print-header h1 { font-size: 16pt; font-weight: 700; }
-  .print-header .print-meta { font-size: 9pt; color: #555; text-align: right; }
+  .print-header h1 { 
+    font-size: 16pt; 
+    font-weight: 700; 
+    margin: 0; 
+    color: #000;
+  }
+  .print-header .print-meta { 
+    font-size: 9pt; 
+    color: #333; 
+    text-align: right; 
+    line-height: 1.4;
+  }
 
-  /* Tables */
-  .data-table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
-  .data-table th { background: #f0f0f0 !important; border: 1pt solid #ccc; padding: 6pt 8pt; font-weight: 700; }
-  .data-table td { border: 1pt solid #ccc; padding: 5pt 8pt; }
-  .data-table tbody tr:hover { background: none !important; }
+  /* Clean tables layout for printer */
+  .data-table { 
+    border-collapse: collapse; 
+    width: 100% !important; 
+    font-size: 9pt; 
+    margin-top: 10px;
+  }
+  .data-table th { 
+    background: #f1f5f9 !important; 
+    border: 1px solid #000 !important; 
+    padding: 6pt 8pt; 
+    font-weight: 700; 
+    color: #000 !important;
+    text-align: left;
+  }
+  .data-table td { 
+    border: 1px solid #ccc !important; 
+    padding: 5pt 8pt; 
+    color: #000 !important;
+    background: transparent !important;
+  }
+  
+  /* Retain thin borders inside print lists */
+  .data-table tr {
+    background: transparent !important;
+    page-break-inside: avoid;
+  }
+
+  /* Avatars inside printed lists */
+  .student-avatar, 
+  img[src^="data:"], 
+  img[src*="http"] {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    border: 1px solid #000 !important;
+    object-fit: cover !important;
+    filter: grayscale(100%) contrast(1.1) !important; /* Grayscale printing */
+  }
 
   /* Grade badges for print */
-  .grade-badge { border: 1pt solid #999; background: none !important; color: #000 !important; padding: 2pt 6pt; }
+  .grade-badge { 
+    border: 1px solid #000 !important; 
+    background: #f8fafc !important; 
+    color: #000 !important; 
+    font-weight: 700 !important;
+    padding: 2px 6px !important; 
+    border-radius: 4px !important;
+    display: inline-block;
+  }
 
-  /* Cards become simple boxes */
+  /* Cards become simple border boxes */
   .card, .course-card, .settings-section, .chart-container, .recommendation-box {
-    border: 1pt solid #ccc !important;
-    border-radius: 0 !important;
+    border: 1px solid #000 !important;
+    border-radius: 4px !important;
     box-shadow: none !important;
     background: #fff !important;
+    padding: 12pt !important;
+    margin-bottom: 12pt !important;
     break-inside: avoid;
   }
 
-  /* Student report layout */
-  .student-print-report { page-break-before: always; }
-  .student-print-report:first-child { page-break-before: auto; }
-
-  /* Page footer */
-  @page {
-    margin: 1.5cm;
-    @bottom-right { content: "Seite " counter(page) " / " counter(pages); font-size: 8pt; }
-    @bottom-left  { content: "NotenPro – Erstellt am " attr(data-print-date); font-size: 8pt; }
+  /* Page breaks */
+  .student-print-report { 
+    page-break-before: always; 
+  }
+  .student-print-report:first-child { 
+    page-break-before: auto; 
   }
 
-  /* Hide chart canvases, show print-friendly alt */
-  canvas { display: none !important; }
-  .chart-print-fallback { display: block !important; }
+  /* Page margins and layout configuration */
+  @page {
+    margin: 1.5cm;
+    size: portrait;
+  }
+  
+  /* Hide interactive chart canvases, show print fallback description if any */
+  canvas { 
+    display: none !important; 
+  }
+  .chart-print-fallback { 
+    display: block !important; 
+    font-size: 9pt;
+    color: #555;
+    font-style: italic;
+  }
 }
 
-/* Hide print-only elements on screen */
-.print-header { display: none; }
-.chart-print-fallback { display: none; }
+/* Hide print elements on screen */
+.print-header { display: none !important; }
+.chart-print-fallback { display: none !important; }
+
