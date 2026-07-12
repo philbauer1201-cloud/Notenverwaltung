@@ -493,7 +493,8 @@ function showAddStudentModal(courseId, onDone) {
   });
 }
 
-function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+
 function isAdult(birthDateString) {
   if (!birthDateString) return null;
   const today = new Date();
