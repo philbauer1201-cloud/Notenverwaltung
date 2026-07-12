@@ -590,15 +590,8 @@ function showMoveModal(studentId, name, fromKvId, container, state) {
   ]);
 }
 
-function exportCSV(kvId) {
-  const kv=getKVClass(kvId);
-  const students=getKVStudents(kvId);
-  const headers=["Nachname","Vorname","Geburtsdatum","Alter","Ue18","Spind-Nr.","Schloss bezahlt","Schulgeld BAR","Schulgeld KARTE","Summe Schulgeld",...DOC_KEYS.map(k=>DOC_LABELS[k]),"Raucher","Religion","Befreiungen","Vorerhebung LAP","Kommentar"];
-  const ds={0:"Offen",1:"Erledigt",2:"Nicht erforderlich"};
-  const rows=[headers,...students.map(s=>{
-    const age=calculateAge(s.geburtsdatum);
-    const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
-    return[s.nachname||s.lastName,s.vorname||s.firstName,s.geburtsdatum||"",age!==null?age:"",isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein",s.spindNr??"",s.schlossBezahlt?"Ja":"Nein",s.schulgeldBar||0,s.schulgeldKarte||0,summe,...DOC_KEYS.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),s.raucher?"Ja":"Nein",s.religion||"",s.befreiungen||"",s.vorerhebungLAP?"Ja":"Nein",s.kommentar||""];
+
+
 // ── Export Dialog ─────────────────────────────────────────────────
 function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, isFiltered, mode) {
   const modeLabel = mode === "print" ? "Drucken" : "CSV exportieren";
