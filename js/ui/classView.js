@@ -307,9 +307,12 @@ function studentRow(student, course, assessments) {
     <tr>
       <td data-label="Name" class="col-name">
         <div class="flex items-center gap-2">
-          <div class="student-avatar" style="width:30px;height:30px;font-size:.75rem;flex-shrink:0">
-            ${student.firstName[0]}${student.lastName[0]}
-          </div>
+          ${student.photo
+            ? `<img src="${student.photo}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--accent);flex-shrink:0;">`
+            : `<div class="student-avatar" style="width:30px;height:30px;font-size:.75rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-card-3);border:1px solid var(--border);border-radius:50%;font-weight:700;">
+                ${student.firstName?.[0]||''}${student.lastName?.[0]||''}
+               </div>`
+          }
           <div class="flex flex-col">
             <span style="font-weight:600;line-height:1.2">${escHtml(student.lastName)}, ${escHtml(student.firstName)}</span>
             <div class="flex items-center gap-1 mt-1" style="flex-wrap:wrap">

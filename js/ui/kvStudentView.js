@@ -58,7 +58,10 @@ export function renderKVStudentView(container, kvId, studentId) {
   container.innerHTML = `<div class="page-anim">
     <!-- Header -->
     <div class="student-header" style="margin-bottom:2.8rem;">
-      <div class="student-avatar">${initials}</div>
+      ${student.photo
+        ? `<img src="${student.photo}" style="width:5rem;height:5rem;border-radius:50%;object-fit:cover;border:2.5px solid var(--accent);flex-shrink:0;">`
+        : `<div class="student-avatar" style="width:5rem;height:5rem;font-size:1.8rem;display:flex;align-items:center;justify-content:center;font-weight:700;border-radius:50%;background:var(--bg-card-3);border:2.5px solid var(--border);">${initials}</div>`
+      }
       <div class="student-header-info">
         <h2>${name}</h2>
         <p>

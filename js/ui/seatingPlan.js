@@ -125,7 +125,10 @@ export function renderSeatingPlan(container, courseId) {
           gridHTML += `
             <div class="seat-card occupied" data-row="${r}" data-col="${c}" style="border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--bg-card-2);padding:10px;text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px">
               <button class="btn-remove-seat no-print" data-row="${r}" data-col="${c}" title="Platz leeren" style="position:absolute;top:4px;right:4px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.75rem">×</button>
-              <div class="student-avatar" style="width:28px;height:28px;font-size:0.75rem">${initials}</div>
+              ${student.photo
+                ? `<img src="${student.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--accent);flex-shrink:0;">`
+                : `<div class="student-avatar" style="width:28px;height:28px;font-size:0.75rem;display:flex;align-items:center;justify-content:center;background:var(--bg-card-3);border:1px solid var(--border);border-radius:50%;font-weight:700;margin:0 auto;">${initials}</div>`
+              }
               <div style="font-size:0.78rem;font-weight:600;line-height:1.2;word-break:break-word;width:100%">${escHtml(student.lastName)}</div>
               <div style="font-size:0.7rem;color:var(--text-secondary);word-break:break-word;width:100%">${escHtml(student.firstName)}</div>
               <div style="display:flex;gap:3px;margin-top:2px">

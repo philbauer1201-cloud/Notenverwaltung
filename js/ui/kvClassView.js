@@ -221,7 +221,10 @@ function renderContent(container, kvId, state) {
               return `<tr class="kv-student-row" data-id="${s.id}" style="cursor:pointer;">
                 <td class="col-name">
                   <div style="display:flex;align-items:center;gap:1.2rem;">
-                    <div style="width:3.6rem;height:3.6rem;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:1.35rem;flex-shrink:0;">${initials}</div>
+                    ${s.photo 
+                      ? `<img src="${s.photo}" style="width:3.6rem;height:3.6rem;border-radius:50%;object-fit:cover;border:1.5px solid var(--accent);flex-shrink:0;">`
+                      : `<div style="width:3.6rem;height:3.6rem;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:1.35rem;flex-shrink:0;">${initials}</div>`
+                    }
                     <div>
                       <div style="font-weight:600;">${escHtml(s.nachname||s.lastName)} ${escHtml(s.vorname||s.firstName)}</div>
                       ${s.geburtsdatum?`<div style="font-size:1.2rem;color:var(--text-muted);">${new Date(s.geburtsdatum).toLocaleDateString("de-AT")}</div>`:""}
