@@ -1,4 +1,4 @@
-import { getGlobalStudents, updateStudent, getKVClasses, addStudentToKVClass, removeStudentFromKVClass, createStudent } from '../db.js';
+import { getGlobalStudents, updateStudent, getKVClasses, addStudentToKVClass, removeStudentFromKVClass, createStudent, getCourses, assignStudentToCourse, removeStudentFromCourse } from '../db.js';
 import { navigate, showModal, closeModal, showToast } from '../app.js';
 
 export function renderStudentsDashboard(container) {
