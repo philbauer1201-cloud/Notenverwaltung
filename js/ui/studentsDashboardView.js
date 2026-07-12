@@ -108,20 +108,42 @@ export function renderStudentsDashboard(container) {
 
     const kvClasses = getKVClasses() || [];
 
+    // Sort by last name
+    students.sort((a,b) => a.lastName.localeCompare(b.lastName));
+
+    const { getKVClasses, addStudentToKVClass, removeStudentFromKVClass, getCourses, assignStudentToCourse, removeStudentFromCourse } = await import('../db.js');
+    const kvClasses = getKVClasses() || [];
+    const courses = getCourses() || [];
+
     // Helper to find which KV class a student belongs to
     const findStudentKVClass = (studentId) => {
       return kvClasses.find(c => (c.studentIds || []).includes(studentId));
     };
 
+    // Helper to find which Courses a student belongs to
+    const findStudentCourses = (studentId) => {
+      return courses.filter(c => (c.studentIds || []).includes(studentId));
+    };
+
     container.innerHTML = `
-      <div class="section-title">Alle Schüler <span class="label-count">${students.length}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.6rem;flex-wrap:wrap;gap:1rem;">
+        <div class="section-title" style="margin:0;">Alle Schüler <span class="label-count">${students.length}</span></div>
+        <div style="display:flex;gap:0.8rem;" id="bulk-actions-container">
+          <button class="btn btn-ghost btn-sm" id="btn-bulk-assign" style="display:none;color:var(--accent);border:1px solid var(--accent);">
+            📂 Klassen zuweisen (<span id="bulk-select-count">0</span>)
+          </button>
+        </div>
+      </div>
       <div class="table-wrapper">
         <table class="data-table mobile-cards">
           <thead>
             <tr>
+              <th style="width:40px;text-align:center;">
+                <input type="checkbox" id="select-all-students" style="width:1.8rem;height:1.8rem;cursor:pointer;">
+              </th>
               <th style="width:250px">Name</th>
               <th>Geburtsdatum</th>
-              <th>KV-Klasse</th>
+              <th>Zuweisung</th>
               <th>IBA-Status</th>
               <th>Zusatzinfos</th>
               <th class="col-actions"></th>
@@ -129,14 +151,23 @@ export function renderStudentsDashboard(container) {
           </thead>
           <tbody>
             ${students.map(s => {
-              const assignedClass = findStudentKVClass(s.id);
+              const assignedKV = findStudentKVClass(s.id);
+              const assignedCourses = findStudentCourses(s.id);
+              const labelParts = [];
+              if (assignedKV) labelParts.push(`KV: ${assignedKV.name}`);
+              if (assignedCourses.length) labelParts.push(`Kurse (${assignedCourses.length})`);
+              const assignLabel = labelParts.length ? labelParts.join(" | ") : "+ Zuweisen";
+              
               return `
               <tr>
+                <td style="text-align:center;" data-label="Auswählen">
+                  <input type="checkbox" class="student-select-checkbox" data-id="${s.id}" style="width:1.8rem;height:1.8rem;cursor:pointer;">
+                </td>
                 <td data-label="Name" style="font-weight:600">${escHtml(s.lastName)}, ${escHtml(s.firstName)}</td>
                 <td data-label="Geburtsdatum">${s.birthDate ? formatDateShort(s.birthDate) : '–'}</td>
-                <td data-label="KV-Klasse">
-                  <button class="btn btn-sm btn-ghost btn-assign-class-quick" data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}" style="color:${assignedClass?'var(--accent)':'var(--text-muted)'}; border: 1px dashed ${assignedClass?'var(--accent)':'var(--border)'}; font-weight:600; padding:0.4rem 0.8rem;">
-                    ${assignedClass ? escHtml(assignedClass.name) : '+ Zuweisen'}
+                <td data-label="Zuweisung">
+                  <button class="btn btn-sm btn-ghost btn-assign-class-quick" data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}" style="color:${labelParts.length?'var(--accent)':'var(--text-muted)'}; border: 1px dashed ${labelParts.length?'var(--accent)':'var(--border)'}; font-weight:600; padding:0.4rem 0.8rem;">
+                    ${assignLabel}
                   </button>
                 </td>
                 <td data-label="IBA-Status">
@@ -157,58 +188,50 @@ export function renderStudentsDashboard(container) {
       </div>
     `;
 
-    // Quick assign class event handler
+    // Bulk selection handler
+    const selectAllCb = container.querySelector("#select-all-students");
+    const rowCheckboxes = container.querySelectorAll(".student-select-checkbox");
+    const bulkAssignBtn = container.querySelector("#btn-bulk-assign");
+    const bulkCountSpan = container.querySelector("#bulk-select-count");
+
+    const updateBulkButtonState = () => {
+      const checked = [...rowCheckboxes].filter(cb => cb.checked);
+      if (checked.length > 0) {
+        bulkAssignBtn.style.display = "inline-flex";
+        bulkCountSpan.textContent = checked.length;
+      } else {
+        bulkAssignBtn.style.display = "none";
+      }
+    };
+
+    selectAllCb?.addEventListener("change", () => {
+      rowCheckboxes.forEach(cb => cb.checked = selectAllCb.checked);
+      updateBulkButtonState();
+    });
+
+    rowCheckboxes.forEach(cb => {
+      cb.addEventListener("change", () => {
+        updateBulkButtonState();
+        if (!cb.checked && selectAllCb) selectAllCb.checked = false;
+      });
+    });
+
+    // Bulk assign handler
+    bulkAssignBtn?.addEventListener("click", () => {
+      const selectedIds = [...rowCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.id);
+      showZuweisungModal(selectedIds, `Klassen zuweisen für ${selectedIds.length} Schüler`, courses, kvClasses, () => {
+        renderStudentsDashboard(container);
+      });
+    });
+
+    // Individual assign class event handler
     container.querySelectorAll('.btn-assign-class-quick').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const studentId = btn.dataset.id;
         const studentName = btn.dataset.name;
-        const currentClass = findStudentKVClass(studentId);
-
-        showModal(`Klassenzuweisung: ${studentName}`, `
-          <div class="form-group">
-            <label class="form-label">KV-Klasse auswählen</label>
-            <div style="display:flex;flex-direction:column;gap:0.8rem;max-height:30rem;overflow-y:auto;padding-right:0.4rem;">
-              ${kvClasses.length === 0 
-                ? '<div style="padding:1.6rem;text-align:center;color:var(--text-muted);">Keine KV-Klassen angelegt.</div>' 
-                : kvClasses.map(c => `
-                  <button class="btn ${currentClass?.id === c.id ? 'btn-primary' : 'btn-ghost'} btn-select-class-target" data-classid="${c.id}" style="width:100%;text-align:left;padding:1rem 1.4rem;">
-                    ${escHtml(c.name)} ${currentClass?.id === c.id ? ' (Aktuelle Zuweisung)' : ''}
-                  </button>
-                `).join('')}
-              
-              ${currentClass ? `
-                <hr style="border-color:var(--border);margin:0.8rem 0;">
-                <button class="btn btn-ghost btn-select-class-target" data-classid="none" style="width:100%;text-align:left;color:var(--grade-5);padding:1rem 1.4rem;">
-                  ❌ Aus Klasse austragen
-                </button>
-              ` : ''}
-            </div>
-          </div>
-        `, [
-          { label: 'Abbrechen', cls: 'btn-ghost', onClick: closeModal }
-        ]);
-
-        document.querySelectorAll('.btn-select-class-target').forEach(targetBtn => {
-          targetBtn.addEventListener('click', () => {
-            const classId = targetBtn.dataset.classid;
-            
-            // Remove from current class first if assigned
-            if (currentClass) {
-              removeStudentFromKVClass(currentClass.id, studentId);
-            }
-            
-            // Add to new class if chosen
-            if (classId !== 'none') {
-              addStudentToKVClass(classId, studentId);
-              showToast(`${studentName} zugewiesen zu Klasse`, 'success');
-            } else {
-              showToast(`${studentName} aus Klasse entfernt`, 'info');
-            }
-            
-            closeModal();
-            renderStudentsDashboard(container);
-          });
+        showZuweisungModal([studentId], `Zuweisung: ${studentName}`, courses, kvClasses, () => {
+          renderStudentsDashboard(container);
         });
       });
     });
@@ -220,6 +243,121 @@ export function renderStudentsDashboard(container) {
       });
     });
   }
+}
+
+// ── Universal Zuweisung Modal (Individual and Bulk) ─────────────────
+function showZuweisungModal(studentIds, title, courses, kvClasses, onDone) {
+  const isBulk = studentIds.length > 1;
+
+
+  // For individual student, find current assignments
+  let currentKV = null;
+  let currentCourses = [];
+  if (!isBulk) {
+    const sid = studentIds[0];
+    currentKV = kvClasses.find(c => (c.studentIds || []).includes(sid));
+    currentCourses = courses.filter(c => (c.studentIds || []).includes(sid));
+  }
+
+  showModal(title, `
+    <div style="display:flex;flex-direction:column;gap:1.8rem;">
+      
+      <!-- Section 1: Fach-Kurse -->
+      <div>
+        <div style="font-weight:700;font-size:1.3rem;margin-bottom:0.8rem;">📘 Fach-Kurse / Noten-Klassen (Mehrfachauswahl)</div>
+        ${isBulk ? `
+        <div style="font-size:1.2rem;color:var(--text-muted);margin-bottom:0.8rem;">
+          Wähle Fach-Kurse, in die alle ausgewählten Schüler eingeschrieben werden sollen.
+        </div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;max-height:20rem;overflow-y:auto;padding-right:0.4rem;">
+          ${courses.length === 0 
+            ? '<div style="color:var(--text-muted);padding:1rem;">Keine Fach-Kurse angelegt.</div>'
+            : courses.map(c => {
+                const isChecked = !isBulk && currentCourses.some(cc => cc.id === c.id);
+                return `
+                <label style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);">
+                  <input type="checkbox" class="modal-assign-course-cb" value="${c.id}" ${isChecked?"checked":""} style="width:1.8rem;height:1.8rem;">
+                  <div>
+                    <div style="font-weight:600;font-size:1.25rem;">${escHtml(c.name)}</div>
+                    <div style="font-size:1.1rem;color:var(--text-muted);">${escHtml(c.subject)}</div>
+                  </div>
+                </label>`;
+              }).join('')}
+        </div>
+      </div>
+
+      <!-- Section 2: KV Klasse -->
+      <div>
+        <div style="font-weight:700;font-size:1.3rem;margin-bottom:0.8rem;">📋 Klassenvorstand-Klasse (Einfachauswahl)</div>
+        ${isBulk ? `
+        <div style="font-size:1.2rem;color:var(--text-muted);margin-bottom:0.8rem;">
+          Wähle eine KV-Klasse, der alle ausgewählten Schüler zugewiesen werden.
+        </div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;max-height:20rem;overflow-y:auto;padding-right:0.4rem;">
+          <label style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);">
+            <input type="radio" name="modal-assign-kv-radio" value="none" ${(!isBulk && !currentKV) || isBulk ? "checked" : ""} style="width:1.8rem;height:1.8rem;">
+            <div>
+              <div style="font-weight:600;font-size:1.25rem;color:var(--text-muted);">Keine Zuweisung</div>
+              <div style="font-size:1.1rem;color:var(--text-muted);">Aus KV austragen / Unverändert lassen</div>
+            </div>
+          </label>
+          
+          ${kvClasses.map(c => {
+            const isChecked = !isBulk && currentKV?.id === c.id;
+            return `
+            <label style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);">
+              <input type="radio" name="modal-assign-kv-radio" value="${c.id}" ${isChecked?"checked":""} style="width:1.8rem;height:1.8rem;">
+              <div>
+                <div style="font-weight:600;font-size:1.25rem;">${escHtml(c.name)}</div>
+                <div style="font-size:1.1rem;color:var(--text-muted);">Checklisten & Protokolle</div>
+              </div>
+            </label>`;
+          }).join('')}
+        </div>
+      </div>
+
+    </div>
+  `, [
+    { label: "Abbrechen", cls: "btn-ghost", onClick: closeModal },
+    { label: "Zuweisung speichern", cls: "btn-primary", onClick: () => {
+      const selectedCourses = [...document.querySelectorAll(".modal-assign-course-cb:checked")].map(cb => cb.value);
+      const selectedKV = document.querySelector("input[name='modal-assign-kv-radio']:checked")?.value;
+
+      studentIds.forEach(sid => {
+        // Handle Course membership
+        if (isBulk) {
+          // In bulk, we ADD to selected courses (we don't clear unselected ones unless specified, to avoid accidental loss)
+          selectedCourses.forEach(cid => assignStudentToCourse(cid, sid));
+        } else {
+          // In individual assign, we set exactly the checked ones
+          courses.forEach(c => {
+            const shouldBeIn = selectedCourses.includes(c.id);
+            const isIn = (c.studentIds || []).includes(sid);
+            if (shouldBeIn && !isIn) assignStudentToCourse(c.id, sid);
+            else if (!shouldBeIn && isIn) removeStudentFromCourse(c.id, sid);
+          });
+        }
+
+        // Handle KV Class membership
+        if (selectedKV && selectedKV !== "none") {
+          // Remove from other KV classes
+          kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
+          // Add to selected
+          addStudentToKVClass(selectedKV, sid);
+        } else if (selectedKV === "none" && !isBulk) {
+          // If individual and "none", clear KV assignment
+          kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
+        }
+      });
+
+      closeModal();
+      showToast(isBulk ? "Klassenzuweisungen aktualisiert" : "Zuweisung gespeichert", "success");
+      onDone();
+    }}
+  ], "modal-lg");
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   document.getElementById('btn-global-new-student')?.addEventListener('click', () => {
     showModal('Neuen Schüler anlegen', `
