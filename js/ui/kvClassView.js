@@ -70,7 +70,8 @@ function renderContent(container, kvId, state) {
 
   // Initialize state filters if undefined
   if (!state.financeFilter) state.financeFilter = "all";
-  if (!state.docFilter) state.docFilter = "all";
+  if (!state.docFilterObj) state.docFilterObj = {}; // e.g. { kaliumJodid: 'open', stammblatt: 'done' }
+  if (!state.generalFilter) state.generalFilter = "all"; // all, raucher, u18, ue18
 
   // Search filter
   if (state.search) {
@@ -94,26 +95,22 @@ function renderContent(container, kvId, state) {
       break;
   }
 
-  // Document checklist filter
-  if (state.docFilter !== "all") {
-    if (state.docFilter === "missing_docs") {
-      students = students.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0));
-    } else if (state.docFilter === "raucher") {
-      students = students.filter(s => s.raucher);
-    } else if (state.docFilter === "u18") {
-      students = students.filter(s => !isEigenberechtigt(s.geburtsdatum));
-    } else if (state.docFilter === "ue18") {
-      students = students.filter(s => isEigenberechtigt(s.geburtsdatum));
-    } else if (state.docFilter.startsWith("doc_")) {
-      const docKey = state.docFilter.replace("doc_", "");
-      // Filter for students who have this doc completed (1 or 2)
-      students = students.filter(s => (s.dokumente||{})[docKey] === 1 || (s.dokumente||{})[docKey] === 2);
-    } else if (state.docFilter.startsWith("missingdoc_")) {
-      const docKey = state.docFilter.replace("missingdoc_", "");
-      // Filter for students who still have this doc open (0)
-      students = students.filter(s => (s.dokumente||{})[docKey] === 0);
-    }
+  // General state filters
+  switch(state.generalFilter) {
+    case "raucher": students = students.filter(s => s.raucher); break;
+    case "u18":     students = students.filter(s => !isEigenberechtigt(s.geburtsdatum)); break;
+    case "ue18":    students = students.filter(s => isEigenberechtigt(s.geburtsdatum)); break;
   }
+
+  // Checkbox-based Document checklist multi-filter
+  Object.keys(state.docFilterObj).forEach(key => {
+    const filterVal = state.docFilterObj[key]; // 'done' or 'open'
+    if (filterVal === "done") {
+      students = students.filter(s => (s.dokumente||{})[key] === 1 || (s.dokumente||{})[key] === 2);
+    } else if (filterVal === "open") {
+      students = students.filter(s => (s.dokumente||{})[key] === 0);
+    }
+  });
 
   students = [...students].sort((a,b) => state.sort==="spind" ? (a.spindNr||999)-(b.spindNr||999)
     : ((a.nachname||a.lastName)+(a.vorname||a.firstName)).localeCompare((b.nachname||b.lastName)+(b.vorname||b.firstName),"de"));
@@ -128,7 +125,8 @@ function renderContent(container, kvId, state) {
   const offeneZahlung = all.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0).length;
   const avgPct = all.length ? Math.round(all.reduce((sum,s)=>sum+docProgress(s).pct,0)/all.length) : 0;
 
-  const isFiltered = state.financeFilter !== "all" || state.docFilter !== "all" || state.search;
+  const activeDocCount = Object.keys(state.docFilterObj).filter(k => state.docFilterObj[k] !== "all").length;
+  const isFiltered = state.financeFilter !== "all" || state.generalFilter !== "all" || activeDocCount > 0 || state.search;
   const filterLabel = state.search ? `Suche: "${state.search}"` : "Aktive Filter";
 
   // Update topbar export buttons label
@@ -169,20 +167,40 @@ function renderContent(container, kvId, state) {
           <option value="schloss_open" ${state.financeFilter==="schloss_open"?"selected":""}>Schloss: Offen</option>
         </select>
 
-        <!-- Filter Dokumente / Checklisten -->
-        <select id="kv-filter-doc" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary); max-width: 22rem;">
-          <option value="all" ${state.docFilter==="all"?"selected":""}>📋 Checkliste: Alle</option>
-          <option value="missing_docs" ${state.docFilter==="missing_docs"?"selected":""}>Checkliste: Fehlende Docs (mind. 1 offen)</option>
-          <option value="raucher" ${state.docFilter==="raucher"?"selected":""}>Checkliste: Raucher</option>
-          <option value="u18" ${state.docFilter==="u18"?"selected":""}>Checkliste: U18</option>
-          <option value="ue18" ${state.docFilter==="ue18"?"selected":""}>Checkliste: Ü18</option>
-          <optgroup label="Erledigte Dokumente">
-            ${DOC_KEYS.map(k => `<option value="doc_${k}" ${state.docFilter==="doc_"+k?"selected":""}>Erledigt: ${DOC_LABELS[k]}</option>`).join("")}
-          </optgroup>
-          <optgroup label="Fehlende Dokumente (Offen)">
-            ${DOC_KEYS.map(k => `<option value="missingdoc_${k}" ${state.docFilter==="missingdoc_"+k?"selected":""}>Offen: ${DOC_LABELS[k]}</option>`).join("")}
-          </optgroup>
+        <!-- Allgemeiner Filter (Raucher, Alter) -->
+        <select id="kv-filter-general" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+          <option value="all" ${state.generalFilter==="all"?"selected":""}>👤 Schüler: Alle</option>
+          <option value="raucher" ${state.generalFilter==="raucher"?"selected":""}>Schüler: Raucher</option>
+          <option value="u18" ${state.generalFilter==="u18"?"selected":""}>Schüler: U18</option>
+          <option value="ue18" ${state.generalFilter==="ue18"?"selected":""}>Schüler: Ü18</option>
         </select>
+
+        <!-- Multi-Checklist Filter (Inline Popover Trigger) -->
+        <div style="position:relative;">
+          <button class="btn btn-ghost btn-sm" id="btn-doc-popover" style="padding:0.7rem 1.2rem;border:1px solid var(--border-md);font-size:1.32rem;">
+            📋 Dokumente-Filter ${activeDocCount > 0 ? `(${activeDocCount})` : ""} ▾
+          </button>
+          
+          <div id="doc-popover-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:32rem;max-height:45rem;overflow-y:auto;padding:1.2rem;box-shadow:var(--shadow-lg);display:none;flex-direction:column;gap:0.8rem;">
+            <div style="font-weight:700;font-size:1.25rem;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center;">
+              <span>Dokumente filtern</span>
+              <button class="btn btn-ghost btn-sm" id="btn-reset-doc-filters" style="font-size:1.1rem;padding:0.2rem 0.6rem;">Zurücksetzen</button>
+            </div>
+            
+            ${DOC_KEYS.map(k => {
+              const currentVal = state.docFilterObj[k] || "all";
+              return `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0;border-bottom:1px solid var(--border-light);">
+                <span style="font-size:1.25rem;font-weight:500;margin-right:1rem;">${DOC_LABELS[k]}</span>
+                <div style="display:flex;gap:0.4rem;">
+                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="all"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="all">Alle</button>
+                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="done"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="done">Erledigt</button>
+                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="open"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="open">Offen</button>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+        </div>
 
         <!-- Sortierung -->
         <select id="kv-sort" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
@@ -256,12 +274,49 @@ function renderContent(container, kvId, state) {
     renderContent(container, kvId, {...state, financeFilter: e.target.value});
   });
 
-  container.querySelector("#kv-filter-doc")?.addEventListener("change", e => {
-    renderContent(container, kvId, {...state, docFilter: e.target.value});
+  container.querySelector("#kv-filter-general")?.addEventListener("change", e => {
+    renderContent(container, kvId, {...state, generalFilter: e.target.value});
+  });
+
+  // Doc filter Popover Toggle
+  const popoverBtn = container.querySelector("#btn-doc-popover");
+  const popoverMenu = container.querySelector("#doc-popover-menu");
+  popoverBtn?.addEventListener("click", e => {
+    e.stopPropagation();
+    if (popoverMenu.style.display === "none" || !popoverMenu.style.display) {
+      const rect = popoverBtn.getBoundingClientRect();
+      popoverMenu.style.top = (rect.bottom + 4) + "px";
+      popoverMenu.style.left = rect.left + "px";
+      popoverMenu.style.display = "flex";
+    } else {
+      popoverMenu.style.display = "none";
+    }
+  });
+
+  // Prevent closing when clicking inside popover
+  popoverMenu?.addEventListener("click", e => e.stopPropagation());
+  document.addEventListener("click", () => { if (popoverMenu) popoverMenu.style.display = "none"; }, {once: true});
+
+  // Handle doc filter change
+  container.querySelectorAll(".doc-pop-filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      const val = btn.dataset.val;
+      const newObj = {...state.docFilterObj};
+      if (val === "all") delete newObj[key];
+      else newObj[key] = val;
+      renderContent(container, kvId, {...state, docFilterObj: newObj});
+    });
+  });
+
+  // Reset doc filters
+  container.querySelector("#btn-reset-doc-filters")?.addEventListener("click", () => {
+    renderContent(container, kvId, {...state, docFilterObj: {}});
   });
 
   container.querySelector("#kv-sort")?.addEventListener("change", e =>
     renderContent(container, kvId, {...state, sort: e.target.value}));
+
 
 
   const bulkBtn = container.querySelector("#bulk-btn");
