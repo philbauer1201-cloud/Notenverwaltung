@@ -47,10 +47,27 @@ export function renderStudentsDashboard(container) {
         const idxNachname = headers.findIndex(h => h.includes("nachname"));
         const idxVorname = headers.findIndex(h => h.includes("vorname"));
         const idxMail = headers.findIndex(h => h.includes("mail"));
+        const idxGeburtsdatum = headers.findIndex(h => h.includes("geburt") || h.includes("geb.") || h.includes("geboren"));
 
         if (idxNachname === -1 || idxVorname === -1) {
           return showToast("Spalten 'Nachname' und 'Vorname' wurden nicht gefunden.", "error");
         }
+
+        // Helper to parse DD.MM.YYYY German format into YYYY-MM-DD
+        const parseGermanDateToISO = (dateStr) => {
+          if (!dateStr) return null;
+          const clean = dateStr.replace(/["']/g, "").trim();
+          const match = clean.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+          if (!match) return null;
+          let day = match[1].padStart(2, '0');
+          let month = match[2].padStart(2, '0');
+          let year = match[3];
+          if (year.length === 2) {
+            // Assume 20xx for years starting with 0, 1, 2 etc. otherwise 19xx
+            year = parseInt(year) < 50 ? "20" + year : "19" + year;
+          }
+          return `${year}-${month}-${day}`;
+        };
 
         let newCount = 0;
         for (let i = 1; i < lines.length; i++) {
@@ -59,6 +76,8 @@ export function renderStudentsDashboard(container) {
           const nn = values[idxNachname]?.replace(/["']/g, "");
           const vn = values[idxVorname]?.replace(/["']/g, "");
           const email = idxMail !== -1 ? values[idxMail]?.replace(/["']/g, "") : "";
+          const rawGeb = idxGeburtsdatum !== -1 ? values[idxGeburtsdatum] : "";
+          const parsedGeb = parseGermanDateToISO(rawGeb);
 
           if (!nn || !vn) continue;
 
@@ -73,6 +92,7 @@ export function renderStudentsDashboard(container) {
               vorname: vn,
               firstName: vn,
               lastName: nn,
+              birthDate: parsedGeb,
               kommentar: email ? `E-Mail: ${email}` : ""
             });
             newCount++;
