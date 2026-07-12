@@ -12,6 +12,96 @@
   <link rel="stylesheet" href="css/print.css" media="print" />
 </head>
 <body>
+  
+  <!-- ═══════════════════════════════════════════════════════ GLOBAL SAFE MODE / ERROR BOUNDARY -->
+  <div id="safe-mode-error-screen" style="
+    display:none;
+    position:fixed;inset:0;z-index:100000;
+    background:#0f0f1a;color:#fff;
+    font-family:'Inter',sans-serif;
+    align-items:center;justify-content:center;
+    padding:20px;box-sizing:border-box;
+  ">
+    <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:36px;border-radius:16px;max-width:550px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.5);">
+      <h2 style="color:#ef4444;margin:0 0 12px;font-size:1.8rem;display:flex;align-items:center;gap:10px;">
+        ⚠️ Lade- oder Systemfehler
+      </h2>
+      <p style="color:rgba(255,255,255,0.7);font-size:1.3rem;line-height:1.6;margin-bottom:20px;">
+        Ein Javascript- oder Syntaxfehler blockiert den Anwendungsstart. Dies kann durch fehlerhaften Code oder beschädigten Cache verursacht worden sein.
+      </p>
+      
+      <div id="safe-mode-error-details" style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);padding:14px;border-radius:8px;color:#fca5a5;max-height:150px;overflow-y:auto;margin-bottom:24px;word-break:break-all;white-space:pre-wrap;">
+        Keine Details vorhanden.
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <button onclick="window.location.reload(true)" style="background:#6366f1;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-family:inherit;">
+          🔄 Neu laden & Cache umgehen
+        </button>
+        <button onclick="if(confirm('Achtung: Dies löscht all Ihre lokalen Notendaten und setzt die App zurück! Möchten Sie fortfahren?')){localStorage.clear();window.location.reload(true);}" style="background:transparent;color:#ef4444;border:1px solid #ef4444;padding:12px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-family:inherit;">
+          🗑️ App zurücksetzen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global Error listener to catch module load/syntax errors
+    window.addEventListener('error', function(e) {
+      // Ignore normal CSS/Asset load errors that aren't scripts
+      if (e.target && (e.target.tagName === 'LINK' || e.target.tagName === 'IMG')) return;
+      
+      const errorMsg = e.message || (e.error && e.error.message) || 'SyntaxError / Module Loading Failed';
+      const file = e.filename ? e.filename.split('/').pop() : 'Unbekannte Datei';
+      const line = e.lineno || '?';
+      
+      const detailsBox = document.getElementById('safe-mode-error-details');
+      const screen = document.getElementById('safe-mode-error-screen');
+      
+      if (detailsBox && screen) {
+        detailsBox.textContent = `Fehler: ${errorMsg}\nDatei: ${file}\nZeile: ${line}`;
+        screen.style.display = 'flex';
+        
+        // Hide standard loading overlays
+        const loader = document.getElementById('page-loading');
+        if (loader) loader.style.display = 'none';
+      }
+    }, true);
+
+    window.addEventListener('unhandledrejection', function(e) {
+      const errorMsg = e.reason && (e.reason.message || e.reason);
+      const detailsBox = document.getElementById('safe-mode-error-details');
+      const screen = document.getElementById('safe-mode-error-screen');
+      if (detailsBox && screen && errorMsg) {
+        detailsBox.textContent = `Unhandled Promise Rejection:\n${errorMsg}`;
+        screen.style.display = 'flex';
+        const loader = document.getElementById('page-loading');
+        if (loader) loader.style.display = 'none';
+      }
+    });
+
+    // Timeout safety for the loading screen (max 3 seconds)
+    setTimeout(function() {
+      const loader = document.getElementById('page-loading');
+      const screen = document.getElementById('safe-mode-error-screen');
+      // If loader is still visible, but no safe screen is shown, something is hung up
+      if (loader && window.getComputedStyle(loader).display !== 'none' && screen && screen.style.display !== 'flex') {
+        loader.style.display = 'none';
+        console.warn('Ladevorgang hat das Limit überschritten. Ladeanzeige wurde automatisch beendet.');
+        
+        // Try to force display dashboard if possible, or show a fallback message
+        const content = document.getElementById('page-content');
+        if (content && content.innerHTML.includes('page-loading')) {
+          content.innerHTML = `
+            <div class="empty-state" style="padding:4rem;">
+              <h3>Ladevorgang blockiert</h3>
+              <p>Der Ladevorgang dauerte ungewöhnlich lange. Bitte laden Sie die Seite neu.</p>
+              <button onclick="window.location.reload(true)" class="btn btn-primary" style="margin-top:1.6rem;">Neu laden</button>
+            </div>`;
+        }
+      }
+    }, 3000);
+  </script>
 
 
 

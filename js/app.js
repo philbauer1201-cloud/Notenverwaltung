@@ -84,56 +84,74 @@ export function renderUI(page, params = []) {
   setActiveNav(page);
   resetTopbarActions();
 
-  switch (page) {
-    case 'dashboard':
-      renderDashboard(content);
-      break;
-    case 'classes':
-      renderDashboard(content);
-      break;
-    case 'class':
-      if (params[0]) {
-        renderClassView(content, params[0]);
-      } else {
+  try {
+    switch (page) {
+      case 'dashboard':
         renderDashboard(content);
-      }
-      break;
-    case 'student':
-      if (params[0] && params[1]) {
-        renderStudentView(content, params[0], params[1]);
-      }
-      break;
-    case 'assessments':
-      renderAssessmentsView(content);
-      break;
-    case 'participation':
-      renderParticipationView(content);
-      break;
-    case 'settings':
-      renderSettingsView(content);
-      break;
-    case 'generator':
-      initGeneratorPage(content);
-      break;
-    case 'seating':
-      if (params[0]) renderSeatingPlan(content, params[0]);
-      break;
-    case 'students_db':
-      renderStudentsDashboard(content);
-      break;
-    case 'kv_dashboard':
-      renderKVDashboard(content);
-      break;
-    case 'kv_class':
-      if (params[0]) renderKVClassView(content, params[0]);
-      break;
-    case 'kv_student':
-      if (params[0] && params[1]) renderKVStudentView(content, params[0], params[1]);
-      break;
-    default:
-      renderDashboard(content);
+        break;
+      case 'classes':
+        renderDashboard(content);
+        break;
+      case 'class':
+        if (params[0]) {
+          renderClassView(content, params[0]);
+        } else {
+          renderDashboard(content);
+        }
+        break;
+      case 'student':
+        if (params[0] && params[1]) {
+          renderStudentView(content, params[0], params[1]);
+        }
+        break;
+      case 'assessments':
+        renderAssessmentsView(content);
+        break;
+      case 'participation':
+        renderParticipationView(content);
+        break;
+      case 'settings':
+        renderSettingsView(content);
+        break;
+      case 'generator':
+        initGeneratorPage(content);
+        break;
+      case 'seating':
+        if (params[0]) renderSeatingPlan(content, params[0]);
+        break;
+      case 'students_db':
+        renderStudentsDashboard(content);
+        break;
+      case 'kv_dashboard':
+        renderKVDashboard(content);
+        break;
+      case 'kv_class':
+        if (params[0]) renderKVClassView(content, params[0]);
+        break;
+      case 'kv_student':
+        if (params[0] && params[1]) renderKVStudentView(content, params[0], params[1]);
+        break;
+      default:
+        renderDashboard(content);
+    }
+  } catch (err) {
+    console.error("Critical rendering error:", err);
+    content.innerHTML = `
+      <div class="empty-state" style="padding:4rem; text-align:center;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--grade-5)" stroke-width="2" style="margin-bottom:1.6rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <h3>Fehler beim Laden dieser Ansicht</h3>
+        <p style="color:var(--text-muted); max-width: 45rem; margin: 0 auto 1.6rem;">
+          Beim Aufbau der Seite ist ein Systemfehler aufgetreten: <br>
+          <strong style="color:var(--grade-5); font-family: monospace;">${err.message || err}</strong>
+        </p>
+        <div style="display:flex; justify-content:center; gap:1.2rem;">
+          <button onclick="window.location.hash='#dashboard'; window.location.reload(true);" class="btn btn-primary">🔄 Zum Dashboard &amp; Neu laden</button>
+        </div>
+      </div>
+    `;
   }
 }
+
 
 // ── Navigation ────────────────────────────────────────────────────
 export function navigate(page, params = {}) {
