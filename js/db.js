@@ -332,6 +332,25 @@ export function updateStudent(studentId, data) {
 // Alias
 export const updateGlobalStudent = updateStudent;
 
+export function deleteStudentGlobal(studentId) {
+  const db = getDB();
+  
+  // 1. Remove from all regular courses (cleans up grades, ticks, groups too)
+  (db.courses || []).forEach(c => {
+    removeStudentFromCourse(c.id, studentId);
+  });
+
+  // 2. Remove from all KV classes
+  (db.kvClasses || []).forEach(kv => {
+    kv.studentIds = (kv.studentIds || []).filter(id => id !== studentId);
+  });
+
+  // 3. Remove from global students table
+  db.students = (db.students || []).filter(s => s.id !== studentId);
+  
+  saveDB();
+}
+
 export function assignStudentToCourse(courseId, studentId) {
   const db = getDB();
   const course = db.courses.find(c => c.id === courseId);

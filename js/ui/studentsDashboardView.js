@@ -1,4 +1,4 @@
-import { getGlobalStudents, updateStudent, getKVClasses, addStudentToKVClass, removeStudentFromKVClass, createStudent, getCourses, assignStudentToCourse, removeStudentFromCourse } from '../db.js';
+import { getGlobalStudents, updateStudent, getKVClasses, addStudentToKVClass, removeStudentFromKVClass, createStudent, getCourses, assignStudentToCourse, removeStudentFromCourse, deleteStudentGlobal } from '../db.js';
 import { navigate, showModal, closeModal, showToast } from '../app.js';
 
 export function renderStudentsDashboard(container) {
@@ -149,6 +149,9 @@ export function renderStudentsDashboard(container) {
           <button class="btn btn-ghost btn-sm" id="btn-bulk-assign" style="display:none;color:var(--accent);border:1px solid var(--accent);">
             📂 Klassen zuweisen (<span id="bulk-select-count">0</span>)
           </button>
+          <button class="btn btn-ghost btn-sm" id="btn-bulk-delete" style="display:none;color:var(--grade-5);border:1px solid var(--grade-5);">
+            🗑️ Löschen (<span id="bulk-delete-count">0</span>)
+          </button>
         </div>
       </div>
       <div class="table-wrapper">
@@ -195,8 +198,11 @@ export function renderStudentsDashboard(container) {
                     ${[s.info1, s.info2, s.info3, s.ibaComment].filter(Boolean).map(escHtml).join(', ') || '–'}
                   </div>
                 </td>
-                <td data-label="Aktionen" class="col-actions">
+                <td data-label="Aktionen" class="col-actions" style="display:flex;gap:0.4rem;justify-content:flex-end;">
                   <button class="btn btn-ghost btn-sm btn-edit-global" data-id="${s.id}">Bearbeiten</button>
+                  <button class="btn btn-ghost btn-sm btn-delete-global" data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}" style="color:var(--grade-5);" title="Schüler endgültig löschen">
+                    🗑️
+                  </button>
                 </td>
               </tr>
             `}).join('')}
@@ -209,15 +215,20 @@ export function renderStudentsDashboard(container) {
     const selectAllCb = container.querySelector("#select-all-students");
     const rowCheckboxes = container.querySelectorAll(".student-select-checkbox");
     const bulkAssignBtn = container.querySelector("#btn-bulk-assign");
-    const bulkCountSpan = container.querySelector("#bulk-select-count");
+    const bulkDeleteBtn = container.querySelector("#btn-bulk-delete");
+    const bulkSelectCount = container.querySelector("#bulk-select-count");
+    const bulkDeleteCount = container.querySelector("#bulk-delete-count");
 
     const updateBulkButtonState = () => {
       const checked = [...rowCheckboxes].filter(cb => cb.checked);
       if (checked.length > 0) {
         bulkAssignBtn.style.display = "inline-flex";
-        bulkCountSpan.textContent = checked.length;
+        bulkDeleteBtn.style.display = "inline-flex";
+        bulkSelectCount.textContent = checked.length;
+        bulkDeleteCount.textContent = checked.length;
       } else {
         bulkAssignBtn.style.display = "none";
+        bulkDeleteBtn.style.display = "none";
       }
     };
 
@@ -241,6 +252,16 @@ export function renderStudentsDashboard(container) {
       });
     });
 
+    // Bulk delete handler
+    bulkDeleteBtn?.addEventListener("click", () => {
+      const selectedIds = [...rowCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.id);
+      if (confirm(`Achtung: Möchten Sie diese ${selectedIds.length} Schüler wirklich unwiderruflich aus der Datenbank und allen Kursen löschen?`)) {
+        selectedIds.forEach(id => deleteStudentGlobal(id));
+        showToast(`${selectedIds.length} Schüler gelöscht`, "success");
+        renderStudentsDashboard(container);
+      }
+    });
+
     // Individual assign class event handler
     container.querySelectorAll('.btn-assign-class-quick').forEach(btn => {
       btn.addEventListener('click', e => {
@@ -252,6 +273,21 @@ export function renderStudentsDashboard(container) {
         });
       });
     });
+
+    // Individual delete handler
+    container.querySelectorAll('.btn-delete-global').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const studentId = btn.dataset.id;
+        const studentName = btn.dataset.name;
+        if (confirm(`Möchten Sie ${studentName} wirklich unwiderruflich aus der Datenbank und allen Klassen/Kursen löschen?`)) {
+          deleteStudentGlobal(studentId);
+          showToast(`${studentName} gelöscht`, "success");
+          renderStudentsDashboard(container);
+        }
+      });
+    });
+
 
     // Attach listener for new student button
     document.getElementById('btn-global-new-student')?.addEventListener('click', () => {
