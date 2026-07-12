@@ -86,26 +86,16 @@ export function renderStudentsDashboard(container) {
       }
     };
     reader.readAsText(file, "UTF-8");
-  });
-
-  const students = getGlobalStudents() || [];
-
-  if (students.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5; margin-bottom:16px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        <h3>Datenbank ist leer</h3>
-        <p>Sie haben noch keine Schüler im System angelegt. Fügen Sie Schüler hier oder in Ihren Fach-Kursen hinzu.</p>
-        <button class="btn btn-primary mt-4" id="empty-global-new-student">Schüler anlegen</button>
-      </div>
-    `;
-    container.querySelector('#empty-global-new-student')?.addEventListener('click', () => {
-      document.getElementById('btn-global-new-student').click();
-    });
-
-  } else {
-    // Sort by last name
+  })    // Sort by last name
     students.sort((a,b) => a.lastName.localeCompare(b.lastName));
+
+    const { getKVClasses, addStudentToKVClass, removeStudentFromKVClass } = await import('../db.js');
+    const kvClasses = getKVClasses() || [];
+
+    // Helper to find which KV class a student belongs to
+    const findStudentKVClass = (studentId) => {
+      return kvClasses.find(c => (c.studentIds || []).includes(studentId));
+    };
 
     container.innerHTML = `
       <div class="section-title">Alle Schüler <span class="label-count">${students.length}</span></div>
@@ -115,16 +105,24 @@ export function renderStudentsDashboard(container) {
             <tr>
               <th style="width:250px">Name</th>
               <th>Geburtsdatum</th>
+              <th>KV-Klasse</th>
               <th>IBA-Status</th>
               <th>Zusatzinfos</th>
               <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody>
-            ${students.map(s => `
+            ${students.map(s => {
+              const assignedClass = findStudentKVClass(s.id);
+              return `
               <tr>
                 <td data-label="Name" style="font-weight:600">${escHtml(s.lastName)}, ${escHtml(s.firstName)}</td>
                 <td data-label="Geburtsdatum">${s.birthDate ? formatDateShort(s.birthDate) : '–'}</td>
+                <td data-label="KV-Klasse">
+                  <button class="btn btn-sm btn-ghost btn-assign-class-quick" data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}" style="color:${assignedClass?'var(--accent)':'var(--text-muted)'}; border: 1px dashed ${assignedClass?'var(--accent)':'var(--border)'}; font-weight:600; padding:0.4rem 0.8rem;">
+                    ${assignedClass ? escHtml(assignedClass.name) : '+ Zuweisen'}
+                  </button>
+                </td>
                 <td data-label="IBA-Status">
                   ${s.ibaStatus && s.ibaStatus !== 'none' ? `<span class="badge" style="background:var(--warning-light); color:var(--warning);">${escHtml(s.ibaStatus)}</span>` : '–'}
                 </td>
@@ -137,11 +135,67 @@ export function renderStudentsDashboard(container) {
                   <button class="btn btn-ghost btn-sm btn-edit-global" data-id="${s.id}">Bearbeiten</button>
                 </td>
               </tr>
-            `).join('')}
+            `}).join('')}
           </tbody>
         </table>
       </div>
     `;
+
+    // Quick assign class event handler
+    container.querySelectorAll('.btn-assign-class-quick').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const studentId = btn.dataset.id;
+        const studentName = btn.dataset.name;
+        const currentClass = findStudentKVClass(studentId);
+
+        showModal(`Klassenzuweisung: ${studentName}`, `
+          <div class="form-group">
+            <label class="form-label">KV-Klasse auswählen</label>
+            <div style="display:flex;flex-direction:column;gap:0.8rem;max-height:30rem;overflow-y:auto;padding-right:0.4rem;">
+              ${kvClasses.length === 0 
+                ? '<div style="padding:1.6rem;text-align:center;color:var(--text-muted);">Keine KV-Klassen angelegt.</div>' 
+                : kvClasses.map(c => `
+                  <button class="btn ${currentClass?.id === c.id ? 'btn-primary' : 'btn-ghost'} btn-select-class-target" data-classid="${c.id}" style="width:100%;text-align:left;padding:1rem 1.4rem;">
+                    ${escHtml(c.name)} ${currentClass?.id === c.id ? ' (Aktuelle Zuweisung)' : ''}
+                  </button>
+                `).join('')}
+              
+              ${currentClass ? `
+                <hr style="border-color:var(--border);margin:0.8rem 0;">
+                <button class="btn btn-ghost btn-select-class-target" data-classid="none" style="width:100%;text-align:left;color:var(--grade-5);padding:1rem 1.4rem;">
+                  ❌ Aus Klasse austragen
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `, [
+          { label: 'Abbrechen', cls: 'btn-ghost', onClick: closeModal }
+        ]);
+
+        document.querySelectorAll('.btn-select-class-target').forEach(targetBtn => {
+          targetBtn.addEventListener('click', () => {
+            const classId = targetBtn.dataset.classid;
+            
+            // Remove from current class first if assigned
+            if (currentClass) {
+              removeStudentFromKVClass(currentClass.id, studentId);
+            }
+            
+            // Add to new class if chosen
+            if (classId !== 'none') {
+              addStudentToKVClass(classId, studentId);
+              showToast(`${studentName} zugewiesen zu Klasse`, 'success');
+            } else {
+              showToast(`${studentName} aus Klasse entfernt`, 'info');
+            }
+            
+            closeModal();
+            renderStudentsDashboard(container);
+          });
+        });
+      });
+    });
 
     container.querySelectorAll('.btn-edit-global').forEach(btn => {
       btn.addEventListener('click', () => {
