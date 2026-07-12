@@ -373,26 +373,79 @@ function showEditStudentGlobalModal(student, onDone) {
   const ibaOptions = ['none', '§8b1_N', '§8b2_N', '§8b2_G'];
   const ibaLabels = { 'none': 'Kein IBA-Status', '§8b1_N': '§8b1_N', '§8b2_N': '§8b2_N', '§8b2_G': '§8b2_G' };
 
+  // Fetch current lists to show options
+  const kvClasses = getKVClasses() || [];
+  const courses = getCourses() || [];
+
+  const currentKV = kvClasses.find(c => (c.studentIds || []).includes(student.id));
+  const currentCourses = courses.filter(c => (c.studentIds || []).includes(student.id));
+
   showModal(`Bearbeiten: ${escHtml(student.firstName)} ${escHtml(student.lastName)}`, `
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Vorname</label><input type="text" id="e-fn" value="${escHtml(student.firstName)}"></div>
-      <div class="form-group"><label class="form-label">Nachname</label><input type="text" id="e-ln" value="${escHtml(student.lastName)}"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Geburtsdatum</label><input type="date" id="e-bd" value="${student.birthDate || ''}"></div>
-      <div class="form-group"><label class="form-label">IBA-Status</label>
-        <select id="e-iba">${ibaOptions.map(opt => `<option value="${opt}" ${student.ibaStatus === opt ? 'selected' : ''}>${ibaLabels[opt]}</option>`).join('')}</select>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:2rem;max-height:60vh;overflow-y:auto;padding-right:0.8rem;">
+      <div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Vorname</label><input type="text" id="e-fn" value="${escHtml(student.firstName)}"></div>
+          <div class="form-group"><label class="form-label">Nachname</label><input type="text" id="e-ln" value="${escHtml(student.lastName)}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Geburtsdatum</label><input type="date" id="e-bd" value="${student.birthDate || ''}"></div>
+          <div class="form-group"><label class="form-label">IBA-Status</label>
+            <select id="e-iba">${ibaOptions.map(opt => `<option value="${opt}" ${student.ibaStatus === opt ? 'selected' : ''}>${ibaLabels[opt]}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label">IBA Kommentar</label><input type="text" id="e-ibac" value="${escHtml(student.ibaComment || '')}"></div>
+        <div class="section-title text-sm mt-4">Zusatzinformationen</div>
+        <div class="form-group"><input type="text" id="e-i1" value="${escHtml(student.info1 || '')}" placeholder="Zusatzinfo 1"></div>
+        <div class="form-group"><input type="text" id="e-i2" value="${escHtml(student.info2 || '')}" placeholder="Zusatzinfo 2"></div>
+        <div class="form-group"><input type="text" id="e-i3" value="${escHtml(student.info3 || '')}" placeholder="Zusatzinfo 3"></div>
+      </div>
+
+      <!-- Right column for quick class assignments inside edit modal -->
+      <div style="border-left:1px solid var(--border);padding-left:2rem;display:flex;flex-direction:column;gap:1.6rem;">
+        
+        <div>
+          <div style="font-weight:700;font-size:1.2rem;margin-bottom:0.8rem;">📘 Fach-Kurse (Mehrfachauswahl)</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;max-height:16rem;overflow-y:auto;padding-right:0.4rem;">
+            ${courses.length === 0 
+              ? '<div style="color:var(--text-muted);font-size:1.1rem;">Keine Fach-Kurse angelegt.</div>'
+              : courses.map(c => {
+                  const isChecked = currentCourses.some(cc => cc.id === c.id);
+                  return `
+                  <label style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);font-size:1.15rem;">
+                    <input type="checkbox" class="edit-modal-course-cb" value="${c.id}" ${isChecked?"checked":""} style="width:1.6rem;height:1.6rem;">
+                    <span style="font-weight:600;">${escHtml(c.name)}</span>
+                  </label>`;
+                }).join('')}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-weight:700;font-size:1.2rem;margin-bottom:0.8rem;">📋 Klassenvorstand-Klasse</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;max-height:16rem;overflow-y:auto;padding-right:0.4rem;">
+            <label style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);font-size:1.15rem;">
+              <input type="radio" name="edit-modal-kv-radio" value="none" ${!currentKV ? "checked" : ""} style="width:1.6rem;height:1.6rem;">
+              <span style="color:var(--text-muted);">Keine KV-Klasse</span>
+            </label>
+            ${kvClasses.map(c => {
+              const isChecked = currentKV?.id === c.id;
+              return `
+              <label style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);font-size:1.15rem;">
+                <input type="radio" name="edit-modal-kv-radio" value="${c.id}" ${isChecked?"checked":""} style="width:1.6rem;height:1.6rem;">
+                <span style="font-weight:600;">${escHtml(c.name)}</span>
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+
       </div>
     </div>
-    <div class="form-group"><label class="form-label">IBA Kommentar</label><input type="text" id="e-ibac" value="${escHtml(student.ibaComment || '')}"></div>
-    <div class="section-title text-sm mt-4">Zusatzinformationen</div>
-    <div class="form-group"><input type="text" id="e-i1" value="${escHtml(student.info1 || '')}" placeholder="Zusatzinfo 1"></div>
-    <div class="form-group"><input type="text" id="e-i2" value="${escHtml(student.info2 || '')}" placeholder="Zusatzinfo 2"></div>
-    <div class="form-group"><input type="text" id="e-i3" value="${escHtml(student.info3 || '')}" placeholder="Zusatzinfo 3"></div>
   `, [
     { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
     { label: 'Speichern', cls: 'btn-primary', onClick: () => {
-        updateStudent(student.id, {
+        const sid = student.id;
+
+        // 1. Save standard fields
+        updateStudent(sid, {
           firstName: document.getElementById('e-fn').value.trim(),
           lastName: document.getElementById('e-ln').value.trim(),
           birthDate: document.getElementById('e-bd').value || null,
@@ -402,12 +455,32 @@ function showEditStudentGlobalModal(student, onDone) {
           info2: document.getElementById('e-i2').value.trim(),
           info3: document.getElementById('e-i3').value.trim(),
         });
+
+        // 2. Save Course assignments
+        const selectedCourses = [...document.querySelectorAll(".edit-modal-course-cb:checked")].map(cb => cb.value);
+        courses.forEach(c => {
+          const shouldBeIn = selectedCourses.includes(c.id);
+          const isIn = (c.studentIds || []).includes(sid);
+          if (shouldBeIn && !isIn) assignStudentToCourse(c.id, sid);
+          else if (!shouldBeIn && isIn) removeStudentFromCourse(c.id, sid);
+        });
+
+        // 3. Save KV class assignment
+        const selectedKV = document.querySelector("input[name='edit-modal-kv-radio']:checked")?.value;
+        if (selectedKV && selectedKV !== "none") {
+          kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
+          addStudentToKVClass(selectedKV, sid);
+        } else {
+          kvClasses.forEach(c => removeStudentFromKVClass(c.id, sid));
+        }
+
         closeModal();
-        showToast('Gespeichert', 'success');
+        showToast('Schülerdaten & Zuweisungen gespeichert', 'success');
         onDone();
     }}
-  ]);
+  ], "modal-lg");
 }
+
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function formatDateShort(iso) { if (!iso) return ''; const d = new Date(iso); return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`; }
