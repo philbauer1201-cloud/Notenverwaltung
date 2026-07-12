@@ -107,13 +107,10 @@ export function renderStudentsDashboard(container) {
     students.sort((a,b) => a.lastName.localeCompare(b.lastName));
 
     const kvClasses = getKVClasses() || [];
-
-    // Sort by last name
-    students.sort((a,b) => a.lastName.localeCompare(b.lastName));
-
-    const { getKVClasses, addStudentToKVClass, removeStudentFromKVClass, getCourses, assignStudentToCourse, removeStudentFromCourse } = await import('../db.js');
-    const kvClasses = getKVClasses() || [];
     const courses = getCourses() || [];
+
+
+
 
     // Helper to find which KV class a student belongs to
     const findStudentKVClass = (studentId) => {
