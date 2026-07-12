@@ -4,11 +4,89 @@ import { navigate, showModal, closeModal, showToast } from '../app.js';
 export function renderStudentsDashboard(container) {
   document.getElementById('topbar-breadcrumb').innerHTML = `<strong>Zentrale Schüler-Datenbank</strong>`;
   document.getElementById('topbar-actions').innerHTML = `
+    <input type="file" id="global-csv-file" accept=".csv" style="display:none;">
+    <button class="btn btn-ghost btn-sm" id="btn-global-csv-import" style="color:var(--accent); margin-right: 0.8rem;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.4rem; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Aus CSV importieren
+    </button>
     <button class="btn btn-primary btn-sm" id="btn-global-new-student">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
       Schüler anlegen
     </button>
   `;
+
+  // Attach CSV import events
+  const fileInput = document.getElementById("global-csv-file");
+  document.getElementById("btn-global-csv-import")?.addEventListener("click", () => fileInput?.click());
+  fileInput?.addEventListener("change", async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+      try {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length < 2) return showToast("CSV ist leer oder hat keine Kopfzeile.", "error");
+
+        const parseCSVLine = (line) => {
+          const result = [];
+          let current = "";
+          let inQuotes = false;
+          const delimiter = line.includes(";") ? ";" : ",";
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === delimiter && !inQuotes) { result.push(current.trim()); current = ""; }
+            else current += char;
+          }
+          result.push(current.trim());
+          return result;
+        };
+
+        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/["']/g, ""));
+        const idxNachname = headers.findIndex(h => h.includes("nachname"));
+        const idxVorname = headers.findIndex(h => h.includes("vorname"));
+        const idxMail = headers.findIndex(h => h.includes("mail"));
+
+        if (idxNachname === -1 || idxVorname === -1) {
+          return showToast("Spalten 'Nachname' und 'Vorname' wurden nicht gefunden.", "error");
+        }
+
+        const { createStudent } = await import('../db.js');
+        let newCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseCSVLine(lines[i]);
+          if (values.length < Math.max(idxNachname, idxVorname) + 1) continue;
+          const nn = values[idxNachname]?.replace(/["']/g, "");
+          const vn = values[idxVorname]?.replace(/["']/g, "");
+          const email = idxMail !== -1 ? values[idxMail]?.replace(/["']/g, "") : "";
+
+          if (!nn || !vn) continue;
+
+          const exists = (getGlobalStudents() || []).some(s =>
+            (s.nachname||s.lastName||"").toLowerCase() === nn.toLowerCase() &&
+            (s.vorname||s.firstName||"").toLowerCase() === vn.toLowerCase()
+          );
+
+          if (!exists) {
+            createStudent(null, {
+              nachname: nn,
+              vorname: vn,
+              firstName: vn,
+              lastName: nn,
+              kommentar: email ? `E-Mail: ${email}` : ""
+            });
+            newCount++;
+          }
+        }
+        showToast(`${newCount} neue(r) Schüler importiert!`, "success");
+        renderStudentsDashboard(container);
+      } catch (err) {
+        showToast("Fehler beim Importieren.", "error");
+      }
+    };
+    reader.readAsText(file, "UTF-8");
+  });
 
   const students = getGlobalStudents() || [];
 
@@ -24,6 +102,7 @@ export function renderStudentsDashboard(container) {
     container.querySelector('#empty-global-new-student')?.addEventListener('click', () => {
       document.getElementById('btn-global-new-student').click();
     });
+
   } else {
     // Sort by last name
     students.sort((a,b) => a.lastName.localeCompare(b.lastName));

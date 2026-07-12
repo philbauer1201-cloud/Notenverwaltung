@@ -67,17 +67,54 @@ export function renderKVClassView(container, kvId) {
 function renderContent(container, kvId, state) {
   const kv = getKVClass(kvId);
   let students = getKVStudents(kvId);
+
+  // Initialize state filters if undefined
+  if (!state.financeFilter) state.financeFilter = "all";
+  if (!state.docFilter) state.docFilter = "all";
+
+  // Search filter
   if (state.search) {
     const q = state.search.toLowerCase();
     students = students.filter(s => ((s.nachname||s.lastName||"")+" "+(s.vorname||s.firstName||"")).toLowerCase().includes(q));
   }
-  switch(state.filter) {
-    case "missing_docs":  students = students.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0)); break;
-    case "open_payment":  students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0); break;
-    case "raucher":       students = students.filter(s => s.raucher); break;
-    case "u18":           students = students.filter(s => !isEigenberechtigt(s.geburtsdatum)); break;
-    case "ue18":          students = students.filter(s => isEigenberechtigt(s.geburtsdatum)); break;
+
+  // Finance filter
+  switch(state.financeFilter) {
+    case "open_payment":
+      students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0);
+      break;
+    case "paid_payment":
+      students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)>0);
+      break;
+    case "schloss_paid":
+      students = students.filter(s => s.schlossBezahlt);
+      break;
+    case "schloss_open":
+      students = students.filter(s => !s.schlossBezahlt);
+      break;
   }
+
+  // Document checklist filter
+  if (state.docFilter !== "all") {
+    if (state.docFilter === "missing_docs") {
+      students = students.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0));
+    } else if (state.docFilter === "raucher") {
+      students = students.filter(s => s.raucher);
+    } else if (state.docFilter === "u18") {
+      students = students.filter(s => !isEigenberechtigt(s.geburtsdatum));
+    } else if (state.docFilter === "ue18") {
+      students = students.filter(s => isEigenberechtigt(s.geburtsdatum));
+    } else if (state.docFilter.startsWith("doc_")) {
+      const docKey = state.docFilter.replace("doc_", "");
+      // Filter for students who have this doc completed (1 or 2)
+      students = students.filter(s => (s.dokumente||{})[docKey] === 1 || (s.dokumente||{})[docKey] === 2);
+    } else if (state.docFilter.startsWith("missingdoc_")) {
+      const docKey = state.docFilter.replace("missingdoc_", "");
+      // Filter for students who still have this doc open (0)
+      students = students.filter(s => (s.dokumente||{})[docKey] === 0);
+    }
+  }
+
   students = [...students].sort((a,b) => state.sort==="spind" ? (a.spindNr||999)-(b.spindNr||999)
     : ((a.nachname||a.lastName)+(a.vorname||a.firstName)).localeCompare((b.nachname||b.lastName)+(b.vorname||b.firstName),"de"));
 
@@ -91,16 +128,14 @@ function renderContent(container, kvId, state) {
   const offeneZahlung = all.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0).length;
   const avgPct = all.length ? Math.round(all.reduce((sum,s)=>sum+docProgress(s).pct,0)/all.length) : 0;
 
-  const FILTER_LABELS = {all:"Alle",missing_docs:"Fehlende Docs",open_payment:"Offene Zahlung",raucher:"Raucher",u18:"U18",ue18:"Ue18"};
-  const filterBtns = [["all","Alle"],["missing_docs","Fehlende Docs"],["open_payment","Offene Zahlung"],["raucher","Raucher"],["u18","U18"],["ue18","Ue18"]];
-  const isFiltered = state.filter !== "all" || state.search;
-  const filterLabel = state.search ? `Suche: "${state.search}"` : FILTER_LABELS[state.filter]||"Alle";
+  const isFiltered = state.financeFilter !== "all" || state.docFilter !== "all" || state.search;
+  const filterLabel = state.search ? `Suche: "${state.search}"` : "Aktive Filter";
 
   // Update topbar export buttons label
   document.getElementById("btn-kv-print")?.setAttribute("title",
-    isFiltered ? `Drucken: ${students.length} Schueler (Filter: ${filterLabel})` : `Drucken: alle ${all.length} Schueler`);
+    isFiltered ? `Drucken: ${students.length} Schueler` : `Drucken: alle ${all.length} Schueler`);
   document.getElementById("btn-kv-csv")?.setAttribute("title",
-    isFiltered ? `CSV: ${students.length} Schueler (Filter: ${filterLabel})` : `CSV: alle ${all.length} Schueler`);
+    isFiltered ? `CSV: ${students.length} Schueler` : `CSV: alle ${all.length} Schueler`);
 
   // Re-attach export events with CURRENT filtered list
   document.getElementById("btn-kv-print")?.replaceWith(document.getElementById("btn-kv-print").cloneNode(true));
@@ -118,17 +153,44 @@ function renderContent(container, kvId, state) {
     </div>
     <div class="card" style="margin-bottom:2rem;padding:1.4rem 2rem;">
       <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;">
+        
+        <!-- Suche -->
         <div style="position:relative;flex:1;min-width:18rem;">
           <svg style="position:absolute;left:1.2rem;top:50%;transform:translateY(-50%);opacity:.4;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="kv-search" placeholder="Name suchen..." value="${escHtml(state.search)}" style="padding-left:3.6rem;width:100%;">
         </div>
-        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
-          ${filterBtns.map(([v,l])=>`<button class="btn btn-sm ${state.filter===v?"btn-primary":"btn-ghost"} kv-filter-btn" data-filter="${v}">${l}</button>`).join("")}
-        </div>
-        <select id="kv-sort" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
-          <option value="name" ${state.sort==="name"?"selected":""}>A-Z</option>
-          <option value="spind" ${state.sort==="spind"?"selected":""}>Spind-Nr.</option>
+
+        <!-- Filter Finanzen -->
+        <select id="kv-filter-finance" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+          <option value="all" ${state.financeFilter==="all"?"selected":""}>💶 Schulgeld: Alle</option>
+          <option value="open_payment" ${state.financeFilter==="open_payment"?"selected":""}>Schulgeld: Offen</option>
+          <option value="paid_payment" ${state.financeFilter==="paid_payment"?"selected":""}>Schulgeld: Bezahlt</option>
+          <option value="schloss_paid" ${state.financeFilter==="schloss_paid"?"selected":""}>Schloss: Bezahlt</option>
+          <option value="schloss_open" ${state.financeFilter==="schloss_open"?"selected":""}>Schloss: Offen</option>
         </select>
+
+        <!-- Filter Dokumente / Checklisten -->
+        <select id="kv-filter-doc" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary); max-width: 22rem;">
+          <option value="all" ${state.docFilter==="all"?"selected":""}>📋 Checkliste: Alle</option>
+          <option value="missing_docs" ${state.docFilter==="missing_docs"?"selected":""}>Checkliste: Fehlende Docs (mind. 1 offen)</option>
+          <option value="raucher" ${state.docFilter==="raucher"?"selected":""}>Checkliste: Raucher</option>
+          <option value="u18" ${state.docFilter==="u18"?"selected":""}>Checkliste: U18</option>
+          <option value="ue18" ${state.docFilter==="ue18"?"selected":""}>Checkliste: Ü18</option>
+          <optgroup label="Erledigte Dokumente">
+            ${DOC_KEYS.map(k => `<option value="doc_${k}" ${state.docFilter==="doc_"+k?"selected":""}>Erledigt: ${DOC_LABELS[k]}</option>`).join("")}
+          </optgroup>
+          <optgroup label="Fehlende Dokumente (Offen)">
+            ${DOC_KEYS.map(k => `<option value="missingdoc_${k}" ${state.docFilter==="missingdoc_"+k?"selected":""}>Offen: ${DOC_LABELS[k]}</option>`).join("")}
+          </optgroup>
+        </select>
+
+        <!-- Sortierung -->
+        <select id="kv-sort" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+          <option value="name" ${state.sort==="name"?"selected":""}>Sortieren: A-Z</option>
+          <option value="spind" ${state.sort==="spind"?"selected":""}>Sortieren: Spind-Nr.</option>
+        </select>
+
+        <!-- Bulk Aktionen -->
         <div style="position:relative;">
           <button class="btn btn-ghost btn-sm" id="bulk-btn">Bulk-Aktionen</button>
           <div id="bulk-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:26rem;padding:0.8rem;box-shadow:var(--shadow-md);">
@@ -137,6 +199,8 @@ function renderContent(container, kvId, state) {
         </div>
       </div>
     </div>
+    
+    <!-- Table -->
     <div class="card" style="padding:0;overflow:hidden;">
       ${students.length===0 ? `<div class="empty-state" style="padding:4rem;"><h3>Keine Schueler gefunden</h3><p>Passe den Filter an oder ordne Schueler zu.</p></div>` : `
       <div class="table-responsive">
@@ -187,10 +251,18 @@ function renderContent(container, kvId, state) {
     const inp = container.querySelector("#kv-search");
     if (inp) { inp.focus(); try { inp.setSelectionRange(sel[0], sel[1]); } catch(_){} }
   });
-  container.querySelectorAll(".kv-filter-btn").forEach(btn =>
-    btn.addEventListener("click", () => renderContent(container, kvId, {...state, filter: btn.dataset.filter})));
+  
+  container.querySelector("#kv-filter-finance")?.addEventListener("change", e => {
+    renderContent(container, kvId, {...state, financeFilter: e.target.value});
+  });
+
+  container.querySelector("#kv-filter-doc")?.addEventListener("change", e => {
+    renderContent(container, kvId, {...state, docFilter: e.target.value});
+  });
+
   container.querySelector("#kv-sort")?.addEventListener("change", e =>
     renderContent(container, kvId, {...state, sort: e.target.value}));
+
 
   const bulkBtn = container.querySelector("#bulk-btn");
   const bulkMenu = container.querySelector("#bulk-menu");
