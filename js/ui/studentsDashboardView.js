@@ -178,12 +178,23 @@ export function renderStudentsDashboard(container) {
               if (assignedCourses.length) labelParts.push(`Kurse (${assignedCourses.length})`);
               const assignLabel = labelParts.length ? labelParts.join(" | ") : "+ Zuweisen";
               
+              // Photo fallback to initials
+              const initials = `${s.firstName?.[0]||''}${s.lastName?.[0]||''}`.toUpperCase() || '?';
+              const avatarHtml = s.photo
+                ? `<img src="${s.photo}" style="width:3.2rem;height:3.2rem;border-radius:50%;object-fit:cover;border:1.5px solid var(--accent);flex-shrink:0;">`
+                : `<div style="width:3.2rem;height:3.2rem;border-radius:50%;background:var(--bg-card-3);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.15rem;border:1.5px solid var(--border);flex-shrink:0;">${initials}</div>`;
+
               return `
               <tr>
                 <td style="text-align:center;" data-label="Auswählen">
                   <input type="checkbox" class="student-select-checkbox" data-id="${s.id}" style="width:1.8rem;height:1.8rem;cursor:pointer;">
                 </td>
-                <td data-label="Name" style="font-weight:600">${escHtml(s.lastName)}, ${escHtml(s.firstName)}</td>
+                <td data-label="Name" style="font-weight:600;">
+                  <div style="display:flex;align-items:center;gap:1rem;">
+                    ${avatarHtml}
+                    <span>${escHtml(s.lastName)}, ${escHtml(s.firstName)}</span>
+                  </div>
+                </td>
                 <td data-label="Geburtsdatum">${s.birthDate ? formatDateShort(s.birthDate) : '–'}</td>
                 <td data-label="Zuweisung">
                   <button class="btn btn-sm btn-ghost btn-assign-class-quick" data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}" style="color:${labelParts.length?'var(--accent)':'var(--text-muted)'}; border: 1px dashed ${labelParts.length?'var(--accent)':'var(--border)'}; font-weight:600; padding:0.4rem 0.8rem;">
@@ -208,6 +219,7 @@ export function renderStudentsDashboard(container) {
             `}).join('')}
           </tbody>
         </table>
+
       </div>
     `;
 
@@ -436,9 +448,36 @@ function showEditStudentGlobalModal(student, onDone) {
   const currentKV = kvClasses.find(c => (c.studentIds || []).includes(student.id));
   const currentCourses = courses.filter(c => (c.studentIds || []).includes(student.id));
 
+  const initials = `${student.firstName?.[0]||''}${student.lastName?.[0]||''}`.toUpperCase() || '?';
+
   showModal(`Bearbeiten: ${escHtml(student.firstName)} ${escHtml(student.lastName)}`, `
     <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:2rem;max-height:60vh;overflow-y:auto;padding-right:0.8rem;">
       <div>
+        
+        <!-- Portrait & Image Upload Section -->
+        <div style="display:flex;gap:1.6rem;align-items:center;background:var(--bg-card-3);padding:1.2rem;border-radius:var(--r-md);border:1px solid var(--border);margin-bottom:1.6rem;">
+          <div id="edit-avatar-preview-container">
+            ${student.photo 
+              ? `<img id="edit-avatar-preview" src="${student.photo}" style="width:7rem;height:7rem;border-radius:50%;object-fit:cover;border:2px solid var(--accent);">`
+              : `<div id="edit-avatar-placeholder" style="width:7rem;height:7rem;border-radius:50%;background:var(--bg-card-2);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:2.2rem;border:2px dashed var(--border);">${initials}</div>`
+            }
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;flex-grow:1;">
+            <div style="font-weight:700;font-size:1.2rem;color:var(--text-bright);">Schülerportrait</div>
+            
+            <button class="btn btn-sm btn-ghost" id="btn-upload-photo-modal" style="width:fit-content;border:1px solid var(--border);padding:0.4rem 0.8rem;">
+              📷 Foto hochladen...
+            </button>
+            <input type="file" id="inp-photo-upload" accept="image/*" style="display:none;">
+            <input type="hidden" id="e-photo-data" value="${student.photo || ''}">
+
+            <div style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.4rem;">
+              <span style="font-size:1rem;color:var(--text-muted);">Oder Bildlink aus dem Web einfügen:</span>
+              <input type="text" id="e-photo-url" value="${student.photo && !student.photo.startsWith('data:') ? escHtml(student.photo) : ''}" placeholder="https://beispiel.de/bild.jpg" style="font-size:1.1rem;padding:0.6rem;width:100%;">
+            </div>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group"><label class="form-label">Vorname</label><input type="text" id="e-fn" value="${escHtml(student.firstName)}"></div>
           <div class="form-group"><label class="form-label">Nachname</label><input type="text" id="e-ln" value="${escHtml(student.lastName)}"></div>
@@ -500,11 +539,17 @@ function showEditStudentGlobalModal(student, onDone) {
     { label: 'Speichern', cls: 'btn-primary', onClick: () => {
         const sid = student.id;
 
+        // Image prioritization
+        let photoValue = document.getElementById('e-photo-data').value;
+        const webUrlValue = document.getElementById('e-photo-url').value.trim();
+        if (webUrlValue) photoValue = webUrlValue;
+
         // 1. Save standard fields
         updateStudent(sid, {
           firstName: document.getElementById('e-fn').value.trim(),
           lastName: document.getElementById('e-ln').value.trim(),
           birthDate: document.getElementById('e-bd').value || null,
+          photo: photoValue || null,
           ibaStatus: document.getElementById('e-iba').value,
           ibaComment: document.getElementById('e-ibac').value.trim(),
           info1: document.getElementById('e-i1').value.trim(),
@@ -535,7 +580,65 @@ function showEditStudentGlobalModal(student, onDone) {
         onDone();
     }}
   ], "modal-lg");
+
+  // Wire up photo upload and compression logic
+  const uploadBtn = document.getElementById('btn-upload-photo-modal');
+  const fileInput = document.getElementById('inp-photo-upload');
+  const photoDataInput = document.getElementById('e-photo-data');
+  const photoUrlInput = document.getElementById('e-photo-url');
+  const previewContainer = document.getElementById('edit-avatar-preview-container');
+
+  uploadBtn?.addEventListener('click', () => fileInput?.click());
+
+  fileInput?.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const img = new Image();
+      img.onload = function() {
+        // Compress image using canvas (max 120x120px)
+        const canvas = document.createElement('canvas');
+        const maxDim = 120;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+        } else {
+          if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        
+        // Convert to highly-compressed JPEG base64 to save LocalStorage size
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        
+        photoDataInput.value = compressedBase64;
+        photoUrlInput.value = ''; // clear web url when local file is loaded
+        
+        // Live preview update
+        previewContainer.innerHTML = `<img id="edit-avatar-preview" src="${compressedBase64}" style="width:7rem;height:7rem;border-radius:50%;object-fit:cover;border:2px solid var(--accent);">`;
+        showToast('Foto erfolgreich hochgeladen & komprimiert', 'success');
+      };
+      img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Live preview for web URLs on input
+  photoUrlInput?.addEventListener('input', () => {
+    const val = photoUrlInput.value.trim();
+    if (val) {
+      previewContainer.innerHTML = `<img id="edit-avatar-preview" src="${escHtml(val)}" style="width:7rem;height:7rem;border-radius:50%;object-fit:cover;border:2px solid var(--accent);" onerror="this.src=''; this.outerHTML='<div style=\\'width:7rem;height:7rem;border-radius:50%;background:var(--bg-card-2);color:var(--grade-5);display:flex;align-items:center;justify-content:center;font-weight:700;border:2px dashed var(--grade-5);font-size:1.1rem;\\'>⚠️ Link fehlerhaft</div>';">`;
+    } else {
+      previewContainer.innerHTML = `<div id="edit-avatar-placeholder" style="width:7rem;height:7rem;border-radius:50%;background:var(--bg-card-2);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:2.2rem;border:2px dashed var(--border);">${initials}</div>`;
+    }
+  });
 }
+
 
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
