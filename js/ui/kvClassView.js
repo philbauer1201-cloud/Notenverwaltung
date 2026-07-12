@@ -263,7 +263,16 @@ function showAssignModal(kvId, container) {
       </div>
     </div>
     <hr style="border-color:var(--border);margin:1.2rem 0;">
-    <button class="btn btn-ghost btn-sm" id="btn-new-global-student">+ Neuen Schueler anlegen</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+      <button class="btn btn-ghost btn-sm" id="btn-new-global-student">+ Neuen Schueler anlegen</button>
+      <div>
+        <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
+        <button class="btn btn-ghost btn-sm" id="btn-import-csv" style="color:var(--accent);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.4rem;vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Aus CSV importieren
+        </button>
+      </div>
+    </div>
   `,[
     {label:"Abbrechen",cls:"btn-ghost",onClick:closeModal},
     {label:"Zuordnen",cls:"btn-primary",onClick:()=>{
@@ -274,14 +283,119 @@ function showAssignModal(kvId, container) {
       renderContent(container,kvId,{filter:"all",sort:"name",search:""});
     }}
   ],"modal-lg");
+
   setTimeout(()=>{
     document.getElementById("assign-search")?.addEventListener("input",e=>{
       const q=e.target.value.toLowerCase();
       document.querySelectorAll(".assign-item").forEach(item=>item.style.display=item.textContent.toLowerCase().includes(q)?"":"none");
     });
     document.getElementById("btn-new-global-student")?.addEventListener("click",()=>{ closeModal(); showNewStudentModal(kvId,container); });
-  },50);
+
+    const fileInput = document.getElementById("csv-file-input");
+    const importBtn = document.getElementById("btn-import-csv");
+
+    importBtn?.addEventListener("click", () => fileInput?.click());
+
+    fileInput?.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const text = evt.target.result;
+          const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+          if (lines.length < 2) {
+            showToast("Die CSV Datei enthält nicht genug Daten.", "error");
+            return;
+          }
+
+          // Parse CSV Line Helper (handles quotes and semicolons)
+          const parseCSVLine = (line) => {
+            const result = [];
+            let current = "";
+            let inQuotes = false;
+            // Detect delimiter: semicolon is typical for German Excel exports
+            const delimiter = line.includes(";") ? ";" : ",";
+            
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === delimiter && !inQuotes) {
+                result.push(current.trim());
+                current = "";
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result;
+          };
+
+          const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/["']/g, ""));
+          
+          const idxNachname = headers.findIndex(h => h.includes("nachname"));
+          const idxVorname = headers.findIndex(h => h.includes("vorname"));
+          const idxMail = headers.findIndex(h => h.includes("mail")); // captures "eigene mailadresse" or "email"
+
+          if (idxNachname === -1 || idxVorname === -1) {
+            showToast("Spalten 'Nachname' und 'Vorname' wurden in der Kopfzeile nicht gefunden.", "error");
+            return;
+          }
+
+          let importCount = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            if (values.length < Math.max(idxNachname, idxVorname) + 1) continue;
+
+            const nn = values[idxNachname]?.replace(/["']/g, "");
+            const vn = values[idxVorname]?.replace(/["']/g, "");
+            const email = idxMail !== -1 ? values[idxMail]?.replace(/["']/g, "") : "";
+
+            if (!nn || !vn) continue;
+
+            // Check if student already exists globally
+            let existing = getGlobalStudents().find(s => 
+              (s.nachname||s.lastName||"").toLowerCase() === nn.toLowerCase() &&
+              (s.vorname||s.firstName||"").toLowerCase() === vn.toLowerCase()
+            );
+
+            let studentId;
+            if (!existing) {
+              const newStudent = createStudent(null, {
+                nachname: nn,
+                vorname: vn,
+                firstName: vn,
+                lastName: nn,
+                kommentar: email ? `E-Mail: ${email}` : ""
+              });
+              studentId = newStudent.id;
+            } else {
+              studentId = existing.id;
+            }
+
+            // Assign to this class if not already
+            const alreadyInClass = getKVStudents(kvId).some(s => s.id === studentId);
+            if (!alreadyInClass) {
+              assignStudentToKVClass(kvId, studentId);
+              importCount++;
+            }
+          }
+
+          closeModal();
+          showToast(`${importCount} Schüler erfolgreich importiert & zugeordnet!`, "success");
+          renderContent(container, kvId, { filter: "all", sort: "name", search: "" });
+        } catch (err) {
+          console.error(err);
+          showToast("Fehler beim Parsen der CSV Datei.", "error");
+        }
+      };
+      reader.readAsText(file, "UTF-8");
+    });
+  }, 50);
 }
+
 
 function showNewStudentModal(kvId, container) {
   showModal("Neuen Schueler anlegen",`
