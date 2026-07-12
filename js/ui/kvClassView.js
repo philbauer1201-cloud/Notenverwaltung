@@ -677,23 +677,8 @@ function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, 
   ], "modal-lg");
 }
 
-function printKV(kvId) {
-  const kv=getKVClass(kvId);
-  const students=getKVStudents(kvId);
-  const ds={0:"[ ]",1:"[X]",2:"[-]"};
-  const w=window.open("","_blank");
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${kv.name} KV-Liste</title>
-    <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h1{font-size:15px;}
-    table{width:100%;border-collapse:collapse;}th{background:#f0f0f0;padding:4px;border:1px solid #ccc;font-size:8px;}
-    td{padding:4px;border:1px solid #ddd;}tr:nth-child(even) td{background:#fafafa;}</style>
-  </head><body>
-    <h1>KV-Klasse: ${escHtml(kv.name)} &mdash; ${new Date().toLocaleDateString("de-AT")} &mdash; ${students.length} Schueler</h1>
-    <table><thead><tr><th>Name</th><th>Geb.</th><th>Ue18</th><th>Spind</th><th>Schulgeld</th>
-      ${DOC_KEYS.map(k=>`<th>${DOC_LABELS[k]}</th>`).join("")}<th>Raucher</th><th>Kommentar</th>
-    </tr></thead><tbody>
-      ${students.map(s=>{
-        const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
-// ── Filter-aware print & CSV ──────────────────────────────────────
+
+
 function printKVFiltered(kv, students, cols, activeDocKeys = []) {
   const has = k => cols.includes(k);
   const ds = {0:"[ ]",1:"[X]",2:"[-]"};
