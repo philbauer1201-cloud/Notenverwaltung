@@ -1,263 +1,334 @@
-import { getKVClass, getCourses, addStudentToKVClass, removeStudentFromKVClass, createKVChecklist, toggleKVChecklistTick, deleteKVChecklist, getGlobalStudents, createStudent } from '../db.js';
-import { navigate, showModal, closeModal, showToast, confirm } from '../app.js';
+﻿/**
+ * kvClassView.js - KV-Klassenansicht
+ * Schuelerliste mit Filter, Sortierung, Bulk-Actions, Zuordnung/Verschieben
+ */
+import {
+  getKVClass, getKVClasses, getKVStudents, updateStudent,
+  assignStudentToKVClass, unassignStudentFromKVClass, moveStudentToKVClass,
+  getGlobalStudents, createStudent, calculateAge, isEigenberechtigt
+} from "../db.js";
+import { navigate, showModal, closeModal, showToast, confirm } from "../app.js";
+
+const DOC_LABELS = {
+  kaliumJodid:             "Kalium-Jodid",
+  stammblatt:              "Stammblatt",
+  foto:                    "Foto",
+  lehrvertrag:             "Lehrvertrag",
+  geburtsurkunde:          "Geburtsurkunde",
+  unterschriftenLeitfaden: "Unterschriften Leitfaden",
+  zeugnis:                 "Zeugnis",
+  dsgvo:                   "DSGVO",
+  jugendNetzticket:        "Jugend-Netzticket"
+};
+const DOC_KEYS = Object.keys(DOC_LABELS);
+
+function escHtml(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function docProgress(student) {
+  const docs = student.dokumente || {};
+  const erledigt = DOC_KEYS.filter(k => docs[k] === 1 || docs[k] === 2).length;
+  return { erledigt, total: DOC_KEYS.length, pct: Math.round(erledigt / DOC_KEYS.length * 100) };
+}
+
+function progressBar(pct, erledigt, total) {
+  const color = pct === 100 ? "var(--grade-1)" : pct >= 60 ? "var(--grade-3)" : "var(--grade-5)";
+  return `<div style="display:flex;align-items:center;gap:0.8rem;">
+    <div class="progress-bar" style="flex:1;height:0.6rem;">
+      <div class="progress-bar-fill" style="width:${pct}%;background:${color};"></div>
+    </div>
+    ${total !== "" ? `<span style="font-size:1.2rem;color:var(--text-muted);white-space:nowrap;">${erledigt}/${total}</span>` : ""}
+  </div>`;
+}
 
 export function renderKVClassView(container, kvId) {
   const kv = getKVClass(kvId);
-  if (!kv) {
-    container.innerHTML = '<div class="empty-state"><h3>Klasse nicht gefunden</h3></div>';
-    return;
-  }
-
-  document.getElementById('topbar-breadcrumb').innerHTML = `
-    <a href="#kv_dashboard" class="text-secondary">KV-Klassen</a>
-    <span class="sep">›</span>
-    <strong>${escHtml(kv.name)}</strong>
-  `;
-
-  document.getElementById('topbar-actions').innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="tb-kv-import-course">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-      Aus Kurs übernehmen
+  if (!kv) { container.innerHTML = "<div class='empty-state'><h3>Klasse nicht gefunden</h3></div>"; return; }
+  document.getElementById("topbar-breadcrumb").innerHTML =
+    `<a href="#kv_dashboard" style="color:var(--text-secondary);text-decoration:none;">KV-Klassen</a>
+     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+     <strong>${escHtml(kv.name)}</strong>`;
+  document.getElementById("topbar-actions").innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="btn-kv-print">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Drucken
     </button>
-    <button class="btn btn-ghost btn-sm" id="tb-kv-create-student">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-      Schüler neu anlegen
+    <button class="btn btn-ghost btn-sm" id="btn-kv-csv">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      CSV
     </button>
-    <button class="btn btn-primary btn-sm" id="tb-kv-new-checklist">
+    <button class="btn btn-primary btn-sm" id="btn-assign-student">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Neue Checkliste
-    </button>
-  `;
-
-  renderMatrix(container, kv);
-  attachEvents(container, kv);
+      Schueler zuordnen
+    </button>`;
+  renderContent(container, kvId, { filter: "all", sort: "name", search: "" });
+  document.getElementById("btn-kv-print")?.addEventListener("click", () => printKV(kvId));
+  document.getElementById("btn-kv-csv")?.addEventListener("click",  () => exportCSV(kvId));
+  document.getElementById("btn-assign-student")?.addEventListener("click", () => showAssignModal(kvId, container));
 }
 
-function attachEvents(container, kv) {
-  // ── Neue Checkliste ───────────────────────────────────────────
-  document.getElementById('tb-kv-new-checklist')?.addEventListener('click', () => {
-    showModal('Neue Checkliste anlegen', `
-      <div class="form-group">
-        <label class="form-label">Titel der Checkliste</label>
-        <input type="text" id="cl-title" placeholder="z.B. Kopiergeld, Elternheft unterschrieben, …" autofocus>
-      </div>
-    `, [
-      { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
-      { label: 'Erstellen', cls: 'btn-primary', onClick: () => {
-        const t = document.getElementById('cl-title').value.trim();
-        if (!t) { showToast('Bitte einen Titel eingeben', 'error'); return; }
-        createKVChecklist(kv.id, t);
-        closeModal();
-        showToast(`Checkliste "${t}" erstellt`, 'success');
-        renderKVClassView(container, kv.id);
-      }}
-    ]);
-  });
-
-  // ── Aus Kurs übernehmen ───────────────────────────────────────
-  document.getElementById('tb-kv-import-course')?.addEventListener('click', () => {
-    const courses = getCourses();
-    if (courses.length === 0) {
-      showToast('Keine Fach-Kurse vorhanden. Bitte zuerst einen Kurs mit Schülern anlegen.', 'info');
-      return;
-    }
-    const options = courses.map(c => `<option value="${c.id}">${escHtml(c.name)} (${c.students?.length || 0} Schüler)</option>`).join('');
-    showModal('Schüler aus Kurs übernehmen', `
-      <p class="text-sm text-muted" style="margin-bottom:12px;">Alle Schüler des gewählten Kurses werden in diese KV-Klasse importiert.</p>
-      <div class="form-group">
-        <label class="form-label">Fach-Kurs wählen</label>
-        <select id="import-course-id">${options}</select>
-      </div>
-    `, [
-      { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
-      { label: 'Importieren', cls: 'btn-primary', onClick: () => {
-        const cid = document.getElementById('import-course-id').value;
-        const course = getCourses().find(c => c.id === cid);
-        if (course) {
-          let added = 0;
-          (course.studentIds || []).forEach(sid => {
-            if (!(kv.studentIds || []).includes(sid)) {
-              addStudentToKVClass(kv.id, sid);
-              added++;
-            }
-          });
-          showToast(added > 0 ? `${added} Schüler importiert` : 'Alle Schüler waren bereits in der KV-Klasse', added > 0 ? 'success' : 'info');
-        }
-        closeModal();
-        renderKVClassView(container, kv.id);
-      }}
-    ]);
-  });
-
-  // ── Neuen Schüler direkt anlegen ──────────────────────────────
-  document.getElementById('tb-kv-create-student')?.addEventListener('click', () => {
-    showModal('Neuen Schüler anlegen', `
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Vorname</label>
-          <input type="text" id="inp-kv-fn" placeholder="z.B. Max" autofocus>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Nachname</label>
-          <input type="text" id="inp-kv-ln" placeholder="z.B. Mustermann">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Geburtsdatum (optional)</label>
-        <input type="date" id="inp-kv-bd">
-      </div>
-    `, [
-      { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() },
-      { label: 'Anlegen & zuweisen', cls: 'btn-primary', onClick: () => {
-        const fn = document.getElementById('inp-kv-fn').value.trim();
-        const ln = document.getElementById('inp-kv-ln').value.trim();
-        const bd = document.getElementById('inp-kv-bd').value;
-        if (!fn || !ln) { showToast('Vor- und Nachname erforderlich', 'error'); return; }
-        const s = createStudent(null, { firstName: fn, lastName: ln, birthDate: bd || null });
-        addStudentToKVClass(kv.id, s.id);
-        closeModal();
-        showToast(`${fn} ${ln} angelegt und zugewiesen`, 'success');
-        renderKVClassView(container, kv.id);
-      }}
-    ]);
-  });
-
-  // ── Matrix-Events (Checklisten-Haken & Löschen) ───────────────
-  container.querySelectorAll('.btn-tick').forEach(btn => {
-    btn.addEventListener('click', () => {
-      toggleKVChecklistTick(kv.id, btn.dataset.clid, btn.dataset.sid);
-      const checked = btn.classList.toggle('checked');
-      btn.style.borderColor = checked ? 'var(--primary)' : 'var(--border)';
-      btn.style.background = checked ? 'rgba(99,102,241,0.15)' : 'transparent';
-    });
-  });
-
-  container.querySelectorAll('.btn-del-checklist').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (await confirm(`Checkliste "${btn.dataset.name}" wirklich löschen?`)) {
-        deleteKVChecklist(kv.id, btn.dataset.id);
-        showToast('Checkliste gelöscht', 'info');
-        renderKVClassView(container, kv.id);
-      }
-    });
-  });
-
-  container.querySelectorAll('.btn-rm-student').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (await confirm(`"${btn.dataset.name}" aus der KV-Klasse entfernen?`)) {
-        removeStudentFromKVClass(kv.id, btn.dataset.id);
-        renderKVClassView(container, kv.id);
-      }
-    });
-  });
-}
-
-function renderMatrix(container, kv) {
-  const students = (kv.students || []).slice().sort((a, b) => a.lastName.localeCompare(b.lastName));
-  const checklists = kv.checklists || [];
-
-  // ── Leer-Zustand ─────────────────────────────────────────────
-  if (students.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center; padding: 80px 24px;">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4; margin-bottom:20px; display:block; margin-left:auto; margin-right:auto;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <h3 style="margin-bottom:8px; font-size:1.2rem;">Noch keine Schüler in dieser KV-Klasse</h3>
-        <p style="color:var(--text-muted); margin-bottom:24px;">Fügen Sie Schüler hinzu, um die Checklisten-Matrix zu nutzen.</p>
-        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-          <button class="btn btn-primary" id="empty-btn-import">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-            Aus Kurs übernehmen
-          </button>
-          <button class="btn btn-ghost" id="empty-btn-create">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-            Schüler neu anlegen
-          </button>
-        </div>
-      </div>
-    `;
-    container.querySelector('#empty-btn-import')?.addEventListener('click', () => {
-      document.getElementById('tb-kv-import-course')?.click();
-    });
-    container.querySelector('#empty-btn-create')?.addEventListener('click', () => {
-      document.getElementById('tb-kv-create-student')?.click();
-    });
-    return;
+function renderContent(container, kvId, state) {
+  const kv = getKVClass(kvId);
+  let students = getKVStudents(kvId);
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    students = students.filter(s => ((s.nachname||s.lastName||"")+" "+(s.vorname||s.firstName||"")).toLowerCase().includes(q));
   }
+  switch(state.filter) {
+    case "missing_docs":  students = students.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0)); break;
+    case "open_payment":  students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0); break;
+    case "raucher":       students = students.filter(s => s.raucher); break;
+    case "u18":           students = students.filter(s => !isEigenberechtigt(s.geburtsdatum)); break;
+    case "ue18":          students = students.filter(s => isEigenberechtigt(s.geburtsdatum)); break;
+  }
+  students = [...students].sort((a,b) => state.sort==="spind" ? (a.spindNr||999)-(b.spindNr||999)
+    : ((a.nachname||a.lastName)+(a.vorname||a.firstName)).localeCompare((b.nachname||b.lastName)+(b.vorname||b.firstName),"de"));
 
-  // ── Matrix-Tabelle ────────────────────────────────────────────
-  container.innerHTML = `
-    <div class="section-title" style="margin-bottom:16px;">
-      Checklisten-Matrix
-      <span class="label-count">${checklists.length} Checklisten · ${students.length} Schüler</span>
+  const all = getKVStudents(kvId);
+  const offeneDocs = all.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0)).length;
+  const offeneZahlung = all.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0).length;
+  const avgPct = all.length ? Math.round(all.reduce((sum,s)=>sum+docProgress(s).pct,0)/all.length) : 0;
+
+  const filterBtns = [["all","Alle"],["missing_docs","Fehlende Docs"],["open_payment","Offene Zahlung"],["raucher","Raucher"],["u18","U18"],["ue18","Ue18"]];
+
+  container.innerHTML = `<div class="page-anim">
+    <div class="grid-3" style="margin-bottom:2.4rem;">
+      <div class="card" style="text-align:center;"><div class="stat-card-label">Schueler</div><div class="stat-card-value">${all.length}</div></div>
+      <div class="card" style="text-align:center;"><div class="stat-card-label">Fehlende Docs</div><div class="stat-card-value" style="color:${offeneDocs>0?"var(--grade-5)":"var(--grade-1)"};">${offeneDocs}</div></div>
+      <div class="card" style="text-align:center;"><div class="stat-card-label">Offene Zahlung</div><div class="stat-card-value" style="color:${offeneZahlung>0?"var(--grade-5)":"var(--grade-1)"};">${offeneZahlung}</div></div>
     </div>
-    ${checklists.length === 0 ? `
-      <div class="card" style="text-align:center; padding:32px; margin-bottom:24px; border-style:dashed; background:transparent;">
-        <p style="color:var(--text-muted); margin:0 0 12px 0;">Noch keine Checklisten angelegt.</p>
-        <button class="btn btn-primary btn-sm" id="inline-btn-new-cl">+ Checkliste erstellen (z.B. Kopiergeld)</button>
+    <div class="card" style="margin-bottom:2rem;padding:1.4rem 2rem;">
+      <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;">
+        <div style="position:relative;flex:1;min-width:18rem;">
+          <svg style="position:absolute;left:1.2rem;top:50%;transform:translateY(-50%);opacity:.4;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="kv-search" placeholder="Name suchen..." value="${escHtml(state.search)}" style="padding-left:3.6rem;width:100%;">
+        </div>
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+          ${filterBtns.map(([v,l])=>`<button class="btn btn-sm ${state.filter===v?"btn-primary":"btn-ghost"} kv-filter-btn" data-filter="${v}">${l}</button>`).join("")}
+        </div>
+        <select id="kv-sort" style="padding:0.7rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+          <option value="name" ${state.sort==="name"?"selected":""}>A-Z</option>
+          <option value="spind" ${state.sort==="spind"?"selected":""}>Spind-Nr.</option>
+        </select>
+        <div style="position:relative;">
+          <button class="btn btn-ghost btn-sm" id="bulk-btn">Bulk-Aktionen</button>
+          <div id="bulk-menu" style="display:none;position:absolute;right:0;top:100%;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:100;min-width:26rem;padding:0.8rem;box-shadow:var(--shadow-md);">
+            ${DOC_KEYS.map(k=>`<button class="btn btn-ghost btn-sm bulk-doc-btn" data-key="${k}" style="width:100%;text-align:left;margin-bottom:0.4rem;">Alle <strong>${DOC_LABELS[k]}</strong> - Erledigt</button>`).join("")}
+          </div>
+        </div>
       </div>
-    ` : ''}
-    <div class="table-wrapper" style="overflow-x:auto;">
-      <table class="data-table" style="min-width:500px;">
-        <thead>
-          <tr>
-            <th style="width:220px; position:sticky; left:0; z-index:2; background:var(--surface);">Schüler</th>
-            ${checklists.map(cl => `
-              <th class="col-center" style="min-width:110px;">
-                <div style="font-size:0.82rem; font-weight:600; margin-bottom:6px;">${escHtml(cl.title)}</div>
-                <button class="btn btn-ghost btn-sm btn-del-checklist" 
-                  data-id="${cl.id}" data-name="${escHtml(cl.title)}"
-                  style="font-size:0.7rem; padding:2px 6px; opacity:0.5;">
-                  ✕ Löschen
-                </button>
-              </th>
-            `).join('')}
-            <th style="width:50px;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${students.map(s => `
-            <tr>
-              <td style="font-weight:600; position:sticky; left:0; z-index:1; background:var(--surface);">
-                ${escHtml(s.lastName)}, ${escHtml(s.firstName)}
-              </td>
-              ${checklists.map(cl => {
-                const checked = (cl.ticks || []).includes(s.id);
-                return `
-                  <td class="col-center">
-                    <button class="btn-tick${checked ? ' checked' : ''}" 
-                      data-clid="${cl.id}" data-sid="${s.id}"
-                      title="${checked ? 'Erledigt – klicken zum Rückgängig machen' : 'Noch offen – klicken zum Abhaken'}"
-                      style="
-                        width:32px; height:32px; border-radius:6px; cursor:pointer;
-                        border: 2px solid ${checked ? 'var(--primary)' : 'var(--border)'};
-                        background: ${checked ? 'rgba(99,102,241,0.15)' : 'transparent'};
-                        display:inline-flex; align-items:center; justify-content:center;
-                        transition:all 0.15s; font-size:16px;">
-                      ${checked ? '✓' : ''}
-                    </button>
-                  </td>
-                `;
-              }).join('')}
-              <td class="col-actions">
-                <button class="btn btn-ghost btn-sm btn-rm-student" 
-                  data-id="${s.id}" data-name="${escHtml(s.firstName)} ${escHtml(s.lastName)}"
-                  title="Schüler aus KV-Klasse entfernen">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                </button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
     </div>
-  `;
+    <div class="card" style="padding:0;overflow:hidden;">
+      ${students.length===0 ? `<div class="empty-state" style="padding:4rem;"><h3>Keine Schueler gefunden</h3><p>Passe den Filter an oder ordne Schueler zu.</p></div>` : `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Alter</th><th>Ue18</th><th>Spind</th><th>Schulgeld</th><th>Dokumente</th><th></th></tr></thead>
+          <tbody>
+            ${students.map(s => {
+              const age = calculateAge(s.geburtsdatum);
+              const ue18 = isEigenberechtigt(s.geburtsdatum);
+              const summe = (s.schulgeldBar||0)+(s.schulgeldKarte||0);
+              const prog = docProgress(s);
+              const initials = escHtml(((s.vorname||s.firstName||"?").charAt(0))+((s.nachname||s.lastName||"").charAt(0)));
+              return `<tr class="kv-student-row" data-id="${s.id}" style="cursor:pointer;">
+                <td class="col-name">
+                  <div style="display:flex;align-items:center;gap:1.2rem;">
+                    <div style="width:3.6rem;height:3.6rem;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:1.35rem;flex-shrink:0;">${initials}</div>
+                    <div>
+                      <div style="font-weight:600;">${escHtml(s.nachname||s.lastName)} ${escHtml(s.vorname||s.firstName)}</div>
+                      ${s.geburtsdatum?`<div style="font-size:1.2rem;color:var(--text-muted);">${new Date(s.geburtsdatum).toLocaleDateString("de-AT")}</div>`:""}
+                    </div>
+                  </div>
+                </td>
+                <td>${age!==null?age:"-"}</td>
+                <td style="font-size:1.5rem;">${ue18?"✅":"❌"}</td>
+                <td style="font-family:'JetBrains Mono',monospace;">${s.spindNr!==null&&s.spindNr!==undefined?s.spindNr:"-"}</td>
+                <td><span style="color:${summe>0?"var(--grade-1)":"var(--grade-5)"};font-weight:600;font-family:'JetBrains Mono',monospace;">${summe>0?summe+" EUR":"Offen"}</span></td>
+                <td style="min-width:16rem;">${progressBar(prog.pct,prog.erledigt,prog.total)}</td>
+                <td class="col-actions">
+                  <button class="btn btn-ghost btn-sm btn-move-student" data-id="${s.id}" data-name="${escHtml((s.nachname||s.lastName)+" "+(s.vorname||s.firstName))}" title="Verschieben">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+                  </button>
+                  <button class="btn btn-ghost btn-sm btn-remove-student" data-id="${s.id}" data-name="${escHtml((s.nachname||s.lastName)+" "+(s.vorname||s.firstName))}" title="Entfernen">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+  </div>`;
 
-  // Inline-Button für erste Checkliste
-  container.querySelector('#inline-btn-new-cl')?.addEventListener('click', () => {
-    document.getElementById('tb-kv-new-checklist')?.click();
-  });
+  container.querySelector("#kv-search")?.addEventListener("input", e =>
+    renderContent(container, kvId, {...state, search: e.target.value}));
+  container.querySelectorAll(".kv-filter-btn").forEach(btn =>
+    btn.addEventListener("click", () => renderContent(container, kvId, {...state, filter: btn.dataset.filter})));
+  container.querySelector("#kv-sort")?.addEventListener("change", e =>
+    renderContent(container, kvId, {...state, sort: e.target.value}));
+
+  const bulkBtn = container.querySelector("#bulk-btn");
+  const bulkMenu = container.querySelector("#bulk-menu");
+  bulkBtn?.addEventListener("click", e => { e.stopPropagation(); bulkMenu.style.display = bulkMenu.style.display==="none"?"block":"none"; });
+  document.addEventListener("click", () => { if(bulkMenu) bulkMenu.style.display="none"; }, {once:true});
+
+  container.querySelectorAll(".bulk-doc-btn").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      const key = btn.dataset.key;
+      const all2 = getKVStudents(kvId);
+      if(await confirm(`${DOC_LABELS[key]} fuer ALLE ${all2.length} Schueler auf Erledigt setzen?`)) {
+        all2.forEach(s => updateStudent(s.id, {dokumente:{...s.dokumente,[key]:1}}));
+        showToast(`${DOC_LABELS[key]} fuer alle erledigt`, "success");
+        renderContent(container, kvId, state);
+      }
+    }));
+
+  container.querySelectorAll(".kv-student-row").forEach(row =>
+    row.addEventListener("click", e => {
+      if(e.target.closest("button")) return;
+      navigate("kv_student", {courseId: kvId, studentId: row.dataset.id});
+    }));
+
+  container.querySelectorAll(".btn-move-student").forEach(btn =>
+    btn.addEventListener("click", e => { e.stopPropagation(); showMoveModal(btn.dataset.id, btn.dataset.name, kvId, container, state); }));
+
+  container.querySelectorAll(".btn-remove-student").forEach(btn =>
+    btn.addEventListener("click", async e => {
+      e.stopPropagation();
+      if(await confirm(`${btn.dataset.name} aus dieser Klasse entfernen?`)) {
+        unassignStudentFromKVClass(kvId, btn.dataset.id);
+        showToast("Schueler entfernt", "info");
+        renderContent(container, kvId, state);
+      }
+    }));
 }
 
-function escHtml(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function showAssignModal(kvId, container) {
+  const already = getKVStudents(kvId).map(s=>s.id);
+  const available = getGlobalStudents().filter(s=>!already.includes(s.id));
+  showModal("Schueler zuordnen", `
+    <div class="form-group">
+      <input type="text" id="assign-search" placeholder="Name suchen..." style="margin-bottom:1.2rem;">
+      <div id="assign-list" style="max-height:32rem;overflow-y:auto;display:flex;flex-direction:column;gap:0.6rem;">
+        ${available.length===0
+          ? "<div style='padding:2rem;text-align:center;color:var(--text-muted);'>Alle Schueler bereits zugeordnet</div>"
+          : available.map(s=>`
+            <label style="display:flex;align-items:center;gap:1.2rem;padding:1rem 1.2rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);" class="assign-item">
+              <input type="checkbox" value="${s.id}" style="width:1.8rem;height:1.8rem;cursor:pointer;">
+              <div>
+                <div style="font-weight:600;">${escHtml(s.nachname||s.lastName)} ${escHtml(s.vorname||s.firstName)}</div>
+                ${s.geburtsdatum?`<div style="font-size:1.2rem;color:var(--text-muted);">${new Date(s.geburtsdatum).toLocaleDateString("de-AT")}</div>`:""}
+              </div>
+            </label>`).join("")}
+      </div>
+    </div>
+    <hr style="border-color:var(--border);margin:1.2rem 0;">
+    <button class="btn btn-ghost btn-sm" id="btn-new-global-student">+ Neuen Schueler anlegen</button>
+  `,[
+    {label:"Abbrechen",cls:"btn-ghost",onClick:closeModal},
+    {label:"Zuordnen",cls:"btn-primary",onClick:()=>{
+      const checked=[...document.querySelectorAll("#assign-list input[type=checkbox]:checked")];
+      if(!checked.length) return showToast("Bitte Schueler auswaehlen","error");
+      checked.forEach(cb=>assignStudentToKVClass(kvId,cb.value));
+      closeModal(); showToast(`${checked.length} Schueler zugeordnet`,"success");
+      renderContent(container,kvId,{filter:"all",sort:"name",search:""});
+    }}
+  ],"modal-lg");
+  setTimeout(()=>{
+    document.getElementById("assign-search")?.addEventListener("input",e=>{
+      const q=e.target.value.toLowerCase();
+      document.querySelectorAll(".assign-item").forEach(item=>item.style.display=item.textContent.toLowerCase().includes(q)?"":"none");
+    });
+    document.getElementById("btn-new-global-student")?.addEventListener("click",()=>{ closeModal(); showNewStudentModal(kvId,container); });
+  },50);
+}
+
+function showNewStudentModal(kvId, container) {
+  showModal("Neuen Schueler anlegen",`
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nachname *</label><input type="text" id="ns-nn" placeholder="Mustermann"></div>
+      <div class="form-group"><label class="form-label">Vorname *</label><input type="text" id="ns-vn" placeholder="Max"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Geburtsdatum</label><input type="date" id="ns-geb"></div>
+  `,[
+    {label:"Abbrechen",cls:"btn-ghost",onClick:closeModal},
+    {label:"Anlegen & zuordnen",cls:"btn-primary",onClick:()=>{
+      const nn=document.getElementById("ns-nn").value.trim();
+      const vn=document.getElementById("ns-vn").value.trim();
+      const geb=document.getElementById("ns-geb").value;
+      if(!nn||!vn) return showToast("Nachname und Vorname erforderlich","error");
+      const s=createStudent(null,{nachname:nn,vorname:vn,firstName:vn,lastName:nn,geburtsdatum:geb});
+      assignStudentToKVClass(kvId,s.id);
+      closeModal(); showToast("Schueler angelegt und zugeordnet","success");
+      renderContent(container,kvId,{filter:"all",sort:"name",search:""});
+    }}
+  ]);
+}
+
+function showMoveModal(studentId, name, fromKvId, container, state) {
+  const others=getKVClasses().filter(c=>c.id!==fromKvId);
+  if(!others.length) return showToast("Keine andere KV-Klasse vorhanden","error");
+  showModal(`${name} verschieben`,`
+    <div class="form-group">
+      <label class="form-label">In welche Klasse verschieben?</label>
+      <select id="move-target" style="width:100%;padding:0.9rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+        ${others.map(c=>`<option value="${c.id}">${escHtml(c.name)}</option>`).join("")}
+      </select>
+    </div>
+  `,[
+    {label:"Abbrechen",cls:"btn-ghost",onClick:closeModal},
+    {label:"Verschieben",cls:"btn-primary",onClick:()=>{
+      const toKvId=document.getElementById("move-target").value;
+      moveStudentToKVClass(studentId,fromKvId,toKvId);
+      closeModal(); showToast(`${name} verschoben`,"success");
+      renderContent(container,fromKvId,state);
+    }}
+  ]);
+}
+
+function exportCSV(kvId) {
+  const kv=getKVClass(kvId);
+  const students=getKVStudents(kvId);
+  const headers=["Nachname","Vorname","Geburtsdatum","Alter","Ue18","Spind-Nr.","Schloss bezahlt","Schulgeld BAR","Schulgeld KARTE","Summe Schulgeld",...DOC_KEYS.map(k=>DOC_LABELS[k]),"Raucher","Religion","Befreiungen","Vorerhebung LAP","Kommentar"];
+  const ds={0:"Offen",1:"Erledigt",2:"Nicht erforderlich"};
+  const rows=[headers,...students.map(s=>{
+    const age=calculateAge(s.geburtsdatum);
+    const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
+    return[s.nachname||s.lastName,s.vorname||s.firstName,s.geburtsdatum||"",age!==null?age:"",isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein",s.spindNr??"",s.schlossBezahlt?"Ja":"Nein",s.schulgeldBar||0,s.schulgeldKarte||0,summe,...DOC_KEYS.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),s.raucher?"Ja":"Nein",s.religion||"",s.befreiungen||"",s.vorerhebungLAP?"Ja":"Nein",s.kommentar||""];
+  })];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=`${kv.name}_KV_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast("CSV exportiert","success");
+}
+
+function printKV(kvId) {
+  const kv=getKVClass(kvId);
+  const students=getKVStudents(kvId);
+  const ds={0:"[ ]",1:"[X]",2:"[-]"};
+  const w=window.open("","_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${kv.name} KV-Liste</title>
+    <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h1{font-size:15px;}
+    table{width:100%;border-collapse:collapse;}th{background:#f0f0f0;padding:4px;border:1px solid #ccc;font-size:8px;}
+    td{padding:4px;border:1px solid #ddd;}tr:nth-child(even) td{background:#fafafa;}</style>
+  </head><body>
+    <h1>KV-Klasse: ${escHtml(kv.name)} &mdash; ${new Date().toLocaleDateString("de-AT")} &mdash; ${students.length} Schueler</h1>
+    <table><thead><tr><th>Name</th><th>Geb.</th><th>Ue18</th><th>Spind</th><th>Schulgeld</th>
+      ${DOC_KEYS.map(k=>`<th>${DOC_LABELS[k]}</th>`).join("")}<th>Raucher</th><th>Kommentar</th>
+    </tr></thead><tbody>
+      ${students.map(s=>{
+        const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
+        return`<tr><td><strong>${escHtml(s.nachname||s.lastName)}</strong><br>${escHtml(s.vorname||s.firstName)}</td>
+          <td>${s.geburtsdatum?new Date(s.geburtsdatum).toLocaleDateString("de-AT"):"-"}</td>
+          <td>${isEigenberechtigt(s.geburtsdatum)?"J":"N"}</td>
+          <td>${s.spindNr??"-"}</td>
+          <td>${summe>0?summe+" EUR":"Offen"}</td>
+          ${DOC_KEYS.map(k=>`<td style="text-align:center;">${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join("")}
+          <td>${s.raucher?"Ja":"Nein"}</td><td>${escHtml(s.kommentar||"")}</td></tr>`;
+      }).join("")}
+    </tbody></table>
+  </body></html>`);
+  w.document.close(); w.print();
 }

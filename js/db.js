@@ -6,6 +6,41 @@
 const DB_KEY = 'notenpro_v1';
 
 // ── Default / Seed Data ─────────────────────────────────────────
+function kvStudentDefaults() {
+  return {
+    // Stammdaten
+    nachname: '',
+    vorname: '',
+    geburtsdatum: '',
+    // Infrastruktur & Finanzen
+    spindNr: null,
+    schlossBezahlt: false,
+    schulgeldBar: 0,
+    schulgeldKarte: 0,
+    // Dokumente (0=Offen, 1=Erledigt, 2=Nicht erforderlich)
+    dokumente: {
+      kaliumJodid: 0,
+      stammblatt: 0,
+      foto: 0,
+      lehrvertrag: 0,
+      geburtsurkunde: 0,
+      unterschriftenLeitfaden: 0,
+      zeugnis: 0,
+      dsgvo: 0,
+      jugendNetzticket: 0
+    },
+    // Zusatz
+    raucher: false,
+    religion: '',
+    befreiungen: '',
+    vorerhebungLAP: false,
+    kommentar: '',
+    fotoId: null,
+    // Zuordnungen
+    kvClassIds: []
+  };
+}
+
 function createDefaultData() {
   const cat1 = uid(), cat2 = uid();
   const categories = [
@@ -15,11 +50,11 @@ function createDefaultData() {
 
   const s1 = uid(), s2 = uid(), s3 = uid(), s4 = uid(), s5 = uid();
   const students = [
-    { id: s1, firstName: 'Max', lastName: 'Mustermann' },
-    { id: s2, firstName: 'Laura', lastName: 'Huber' },
-    { id: s3, firstName: 'Felix', lastName: 'Müller' },
-    { id: s4, firstName: 'Anna', lastName: 'Schmidt' },
-    { id: s5, firstName: 'Tom', lastName: 'Kowalski' }
+    { id: s1, firstName: 'Max',   lastName: 'Mustermann', nachname: 'Mustermann', vorname: 'Max',   geburtsdatum: '2007-03-15', ...kvStudentDefaults() },
+    { id: s2, firstName: 'Laura', lastName: 'Huber',      nachname: 'Huber',      vorname: 'Laura', geburtsdatum: '2006-08-22', ...kvStudentDefaults() },
+    { id: s3, firstName: 'Felix', lastName: 'Müller',     nachname: 'Müller',     vorname: 'Felix', geburtsdatum: '2007-01-10', ...kvStudentDefaults() },
+    { id: s4, firstName: 'Anna',  lastName: 'Schmidt',    nachname: 'Schmidt',    vorname: 'Anna',  geburtsdatum: '2006-11-05', ...kvStudentDefaults() },
+    { id: s5, firstName: 'Tom',   lastName: 'Kowalski',   nachname: 'Kowalski',   vorname: 'Tom',   geburtsdatum: '2005-06-30', ...kvStudentDefaults() }
   ];
 
   const course1A = uid();
@@ -63,8 +98,13 @@ function createDefaultData() {
   ];
 
   return {
-    version: 1,
-    settings: { theme: 'dark', lastCourseId: null },
+    version: 2,
+    settings: {
+      theme: 'dark',
+      lastCourseId: null,
+      schulgeldDefault: 30,
+      schlossBetrag: 5
+    },
     students: students,
     kvClasses: [],
     courses: courses
@@ -82,6 +122,10 @@ function migrateData(data) {
 
   if (!data.students) { data.students = []; changed = true; }
   if (!data.kvClasses) { data.kvClasses = []; changed = true; }
+
+  // Settings defaults
+  if (data.settings.schulgeldDefault === undefined) { data.settings.schulgeldDefault = 30; changed = true; }
+  if (data.settings.schlossBetrag    === undefined) { data.settings.schlossBetrag    = 5;  changed = true; }
 
   // Migrate students from courses to central DB
   if (data.courses) {
@@ -106,6 +150,39 @@ function migrateData(data) {
       }
     });
   }
+
+  // Migrate existing students: add missing KV fields
+  const defaults = kvStudentDefaults();
+  data.students.forEach(s => {
+    let studentChanged = false;
+    // Sync nachname/vorname with firstName/lastName
+    if (!s.nachname && s.lastName)  { s.nachname = s.lastName;  studentChanged = true; }
+    if (!s.vorname  && s.firstName) { s.vorname  = s.firstName; studentChanged = true; }
+    // Add missing fields
+    Object.keys(defaults).forEach(key => {
+      if (s[key] === undefined) {
+        s[key] = key === 'dokumente' ? { ...defaults.dokumente } : defaults[key];
+        studentChanged = true;
+      }
+    });
+    if (!s.dokumente) { s.dokumente = { ...defaults.dokumente }; studentChanged = true; }
+    // Fill in missing dokument keys
+    Object.keys(defaults.dokumente).forEach(dk => {
+      if (s.dokumente[dk] === undefined) { s.dokumente[dk] = 0; studentChanged = true; }
+    });
+    if (studentChanged) changed = true;
+  });
+
+  // Migrate kvClasses: build kvClassIds on students
+  data.kvClasses.forEach(kv => {
+    (kv.studentIds || []).forEach(sid => {
+      const s = data.students.find(st => st.id === sid);
+      if (s && !s.kvClassIds.includes(kv.id)) {
+        s.kvClassIds.push(kv.id);
+        changed = true;
+      }
+    });
+  });
 
   if (changed) save(data);
   return data;
@@ -212,9 +289,19 @@ export function getGlobalStudents() {
 }
 export function createStudent(courseId, data) {
   const db = getDB();
-  const student = { id: uid(), firstName: data.firstName || '', lastName: data.lastName || '', ...data };
+  const student = {
+    id: uid(),
+    firstName: data.firstName || data.vorname || '',
+    lastName:  data.lastName  || data.nachname || '',
+    ...kvStudentDefaults(),
+    ...data,
+    // ensure sync
+    nachname: data.nachname || data.lastName  || '',
+    vorname:  data.vorname  || data.firstName || '',
+    dokumente: { ...kvStudentDefaults().dokumente, ...(data.dokumente || {}) },
+    kvClassIds: data.kvClassIds || []
+  };
   db.students.push(student);
-  
   if (courseId) {
     const course = db.courses.find(c => c.id === courseId);
     if (course) {
@@ -229,10 +316,22 @@ export function updateStudent(studentId, data) {
   const db = getDB();
   const idx = db.students.findIndex(s => s.id === studentId);
   if (idx === -1) return null;
-  db.students[idx] = { ...db.students[idx], ...data };
+  // Sync firstName/lastName ↔ vorname/nachname
+  if (data.vorname  !== undefined) data.firstName = data.vorname;
+  if (data.nachname !== undefined) data.lastName  = data.nachname;
+  if (data.firstName !== undefined) data.vorname  = data.firstName;
+  if (data.lastName  !== undefined) data.nachname = data.lastName;
+  db.students[idx] = {
+    ...db.students[idx],
+    ...data,
+    dokumente: { ...db.students[idx].dokumente, ...(data.dokumente || {}) }
+  };
   saveDB();
   return db.students[idx];
 }
+// Alias
+export const updateGlobalStudent = updateStudent;
+
 export function assignStudentToCourse(courseId, studentId) {
   const db = getDB();
   const course = db.courses.find(c => c.id === courseId);
@@ -247,15 +346,12 @@ export function removeStudentFromCourse(courseId, studentId) {
   const course = db.courses.find(c => c.id === courseId);
   if (!course) return;
   course.studentIds = (course.studentIds || []).filter(id => id !== studentId);
-  
-  // Remove results
   course.assessments.forEach(a => {
     a.results = a.results.filter(r => r.studentId !== studentId);
   });
   course.participationRecords.forEach(r => {
     r.ticks = r.ticks.filter(t => t.studentId !== studentId);
   });
-  // Delete from groups
   course.groups.forEach(g => {
     g.members = g.members.filter(id => id !== studentId);
   });
@@ -265,6 +361,68 @@ export function removeStudentFromCourse(courseId, studentId) {
     });
   });
   saveDB();
+}
+
+// ── KV Student Helpers ───────────────────────────────────────────
+export function calculateAge(geburtsdatum) {
+  if (!geburtsdatum) return null;
+  const birth = new Date(geburtsdatum);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+export function isEigenberechtigt(geburtsdatum) {
+  const age = calculateAge(geburtsdatum);
+  return age !== null && age >= 18;
+}
+export function getKVStudents(kvId) {
+  const db = getDB();
+  const kv = db.kvClasses?.find(c => c.id === kvId);
+  if (!kv) return [];
+  return (kv.studentIds || []).map(sid => db.students.find(s => s.id === sid)).filter(Boolean);
+}
+export function moveStudentToKVClass(studentId, fromKvId, toKvId) {
+  const db = getDB();
+  // Remove from source
+  const fromKv = db.kvClasses?.find(c => c.id === fromKvId);
+  if (fromKv) {
+    fromKv.studentIds = (fromKv.studentIds || []).filter(id => id !== studentId);
+  }
+  // Add to target
+  const toKv = db.kvClasses?.find(c => c.id === toKvId);
+  if (toKv && !(toKv.studentIds || []).includes(studentId)) {
+    toKv.studentIds = toKv.studentIds || [];
+    toKv.studentIds.push(studentId);
+  }
+  // Update student's kvClassIds
+  const s = db.students.find(st => st.id === studentId);
+  if (s) {
+    s.kvClassIds = (s.kvClassIds || []).filter(id => id !== fromKvId);
+    if (toKvId && !s.kvClassIds.includes(toKvId)) s.kvClassIds.push(toKvId);
+  }
+  saveDB();
+}
+// Override addStudentToKVClass to also update student.kvClassIds
+export function assignStudentToKVClass(kvId, studentId) {
+  addStudentToKVClass(kvId, studentId);
+  const db = getDB();
+  const s = db.students.find(st => st.id === studentId);
+  if (s && !s.kvClassIds?.includes(kvId)) {
+    s.kvClassIds = s.kvClassIds || [];
+    s.kvClassIds.push(kvId);
+    saveDB();
+  }
+}
+export function unassignStudentFromKVClass(kvId, studentId) {
+  removeStudentFromKVClass(kvId, studentId);
+  const db = getDB();
+  const s = db.students.find(st => st.id === studentId);
+  if (s) {
+    s.kvClassIds = (s.kvClassIds || []).filter(id => id !== kvId);
+    saveDB();
+  }
 }
 
 // ── Assessments ─────────────────────────────────────────────────

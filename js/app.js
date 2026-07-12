@@ -15,7 +15,9 @@ import { initGeneratorPage } from './ui/generatorView.js';
 import { renderSeatingPlan } from './ui/seatingPlan.js';
 import { renderKVDashboard } from './ui/kvDashboardView.js';
 import { renderKVClassView } from './ui/kvClassView.js';
+import { renderKVStudentView } from './ui/kvStudentView.js';
 import { renderStudentsDashboard } from './ui/studentsDashboardView.js';
+
 
 // ── State ────────────────────────────────────────────────────────
 let _currentPage = null;
@@ -125,6 +127,9 @@ export function renderUI(page, params = []) {
     case 'kv_class':
       if (params[0]) renderKVClassView(content, params[0]);
       break;
+    case 'kv_student':
+      if (params[0] && params[1]) renderKVStudentView(content, params[0], params[1]);
+      break;
     default:
       renderDashboard(content);
   }
@@ -133,8 +138,11 @@ export function renderUI(page, params = []) {
 // ── Navigation ────────────────────────────────────────────────────
 export function navigate(page, params = {}) {
   let hash = page;
-  if (page === 'class'    && params.courseId)  hash = `class/${params.courseId}`;
-  if (page === 'student'  && params.courseId && params.studentId) hash = `student/${params.courseId}/${params.studentId}`;
+  if (page === 'class'      && params.courseId)  hash = `class/${params.courseId}`;
+  if (page === 'student'    && params.courseId && params.studentId) hash = `student/${params.courseId}/${params.studentId}`;
+  if (page === 'kv_class'   && params.courseId)  hash = `kv_class/${params.courseId}`;
+  if (page === 'kv_student' && params.courseId && params.studentId) hash = `kv_student/${params.courseId}/${params.studentId}`;
+  if (page === 'seating'    && params.courseId)  hash = `seating/${params.courseId}`;
   window.location.hash = hash;
 }
 
@@ -143,8 +151,10 @@ function setActiveNav(page) {
     const navPage = el.dataset.page || el.id.replace('nav-', '');
     el.classList.toggle('active',
       navPage === page ||
-      (page === 'class' && navPage === 'classes') ||
-      (page === 'student' && navPage === 'classes')
+      (page === 'class'      && navPage === 'classes')      ||
+      (page === 'student'    && navPage === 'classes')      ||
+      (page === 'kv_class'  && navPage === 'kv_dashboard') ||
+      (page === 'kv_student'&& navPage === 'kv_dashboard')
     );
   });
 }
