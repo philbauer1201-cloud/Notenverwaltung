@@ -290,7 +290,7 @@ select option { background: var(--bg-surface); color: var(--text-primary); }
 .theme-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
 [data-theme="dark"] .icon-sun  { display: none; }
 [data-theme="light"] .icon-moon { display: none; }
-[data-theme="light"] .theme-toggle span::after { content: 'Light Mode'; }
+
 
 .sidebar-toggle {
   display: none;

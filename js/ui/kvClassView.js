@@ -1,4 +1,4 @@
-﻿/**
+/**
  * kvClassView.js - KV-Klassenansicht
  * Schuelerliste mit Filter, Sortierung, Bulk-Actions, Zuordnung/Verschieben
  */
@@ -61,8 +61,6 @@ export function renderKVClassView(container, kvId) {
       Schueler zuordnen
     </button>`;
   renderContent(container, kvId, { filter: "all", sort: "name", search: "" });
-  document.getElementById("btn-kv-print")?.addEventListener("click", () => printKV(kvId));
-  document.getElementById("btn-kv-csv")?.addEventListener("click",  () => exportCSV(kvId));
   document.getElementById("btn-assign-student")?.addEventListener("click", () => showAssignModal(kvId, container));
 }
 
@@ -83,12 +81,34 @@ function renderContent(container, kvId, state) {
   students = [...students].sort((a,b) => state.sort==="spind" ? (a.spindNr||999)-(b.spindNr||999)
     : ((a.nachname||a.lastName)+(a.vorname||a.firstName)).localeCompare((b.nachname||b.lastName)+(b.vorname||b.firstName),"de"));
 
+  // Store filtered students on container so topbar export buttons can access them
+  container._kvFilteredStudents = students;
+  container._kvState = state;
+  container._kvId = kvId;
+
   const all = getKVStudents(kvId);
   const offeneDocs = all.filter(s => DOC_KEYS.some(k => (s.dokumente||{})[k]===0)).length;
   const offeneZahlung = all.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0).length;
   const avgPct = all.length ? Math.round(all.reduce((sum,s)=>sum+docProgress(s).pct,0)/all.length) : 0;
 
+  const FILTER_LABELS = {all:"Alle",missing_docs:"Fehlende Docs",open_payment:"Offene Zahlung",raucher:"Raucher",u18:"U18",ue18:"Ue18"};
   const filterBtns = [["all","Alle"],["missing_docs","Fehlende Docs"],["open_payment","Offene Zahlung"],["raucher","Raucher"],["u18","U18"],["ue18","Ue18"]];
+  const isFiltered = state.filter !== "all" || state.search;
+  const filterLabel = state.search ? `Suche: "${state.search}"` : FILTER_LABELS[state.filter]||"Alle";
+
+  // Update topbar export buttons label
+  document.getElementById("btn-kv-print")?.setAttribute("title",
+    isFiltered ? `Drucken: ${students.length} Schueler (Filter: ${filterLabel})` : `Drucken: alle ${all.length} Schueler`);
+  document.getElementById("btn-kv-csv")?.setAttribute("title",
+    isFiltered ? `CSV: ${students.length} Schueler (Filter: ${filterLabel})` : `CSV: alle ${all.length} Schueler`);
+
+  // Re-attach export events with CURRENT filtered list
+  document.getElementById("btn-kv-print")?.replaceWith(document.getElementById("btn-kv-print").cloneNode(true));
+  document.getElementById("btn-kv-csv")?.replaceWith(document.getElementById("btn-kv-csv").cloneNode(true));
+  document.getElementById("btn-kv-print")?.addEventListener("click", () =>
+    showExportDialog(kvId, kv, students, all, filterLabel, isFiltered, "print"));
+  document.getElementById("btn-kv-csv")?.addEventListener("click", () =>
+    showExportDialog(kvId, kv, students, all, filterLabel, isFiltered, "csv"));
 
   container.innerHTML = `<div class="page-anim">
     <div class="grid-3" style="margin-bottom:2.4rem;">
@@ -111,7 +131,7 @@ function renderContent(container, kvId, state) {
         </select>
         <div style="position:relative;">
           <button class="btn btn-ghost btn-sm" id="bulk-btn">Bulk-Aktionen</button>
-          <div id="bulk-menu" style="display:none;position:absolute;right:0;top:100%;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:100;min-width:26rem;padding:0.8rem;box-shadow:var(--shadow-md);">
+          <div id="bulk-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:26rem;padding:0.8rem;box-shadow:var(--shadow-md);">
             ${DOC_KEYS.map(k=>`<button class="btn btn-ghost btn-sm bulk-doc-btn" data-key="${k}" style="width:100%;text-align:left;margin-bottom:0.4rem;">Alle <strong>${DOC_LABELS[k]}</strong> - Erledigt</button>`).join("")}
           </div>
         </div>
@@ -160,8 +180,13 @@ function renderContent(container, kvId, state) {
     </div>
   </div>`;
 
-  container.querySelector("#kv-search")?.addEventListener("input", e =>
-    renderContent(container, kvId, {...state, search: e.target.value}));
+  container.querySelector("#kv-search")?.addEventListener("input", e => {
+    const val = e.target.value;
+    const sel = [e.target.selectionStart, e.target.selectionEnd];
+    renderContent(container, kvId, {...state, search: val});
+    const inp = container.querySelector("#kv-search");
+    if (inp) { inp.focus(); try { inp.setSelectionRange(sel[0], sel[1]); } catch(_){} }
+  });
   container.querySelectorAll(".kv-filter-btn").forEach(btn =>
     btn.addEventListener("click", () => renderContent(container, kvId, {...state, filter: btn.dataset.filter})));
   container.querySelector("#kv-sort")?.addEventListener("change", e =>
@@ -169,7 +194,22 @@ function renderContent(container, kvId, state) {
 
   const bulkBtn = container.querySelector("#bulk-btn");
   const bulkMenu = container.querySelector("#bulk-menu");
-  bulkBtn?.addEventListener("click", e => { e.stopPropagation(); bulkMenu.style.display = bulkMenu.style.display==="none"?"block":"none"; });
+  bulkBtn?.addEventListener("click", e => {
+    e.stopPropagation();
+    if (bulkMenu.style.display === "none") {
+      const rect = bulkBtn.getBoundingClientRect();
+      const menuW = 280;
+      let left = rect.right - menuW; // align right edge with button
+      if (left < 8) left = rect.left; // don't go off left edge
+      if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+      bulkMenu.style.top  = (rect.bottom + 4) + "px";
+      bulkMenu.style.left = Math.max(8, left) + "px";
+      bulkMenu.style.right = "auto";
+      bulkMenu.style.display = "block";
+    } else {
+      bulkMenu.style.display = "none";
+    }
+  });
   document.addEventListener("click", () => { if(bulkMenu) bulkMenu.style.display="none"; }, {once:true});
 
   container.querySelectorAll(".bulk-doc-btn").forEach(btn =>
@@ -304,6 +344,75 @@ function exportCSV(kvId) {
   showToast("CSV exportiert","success");
 }
 
+// ── Export Dialog ─────────────────────────────────────────────────
+function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, isFiltered, mode) {
+  const modeLabel = mode === "print" ? "Drucken" : "CSV exportieren";
+  const colOptions = [
+    {key:"name",    label:"Name / Geburtsdatum", checked:true},
+    {key:"alter",   label:"Alter & Ü18",         checked:true},
+    {key:"spind",   label:"Spind-Nr.",            checked:true},
+    {key:"schulgeld",label:"Schulgeld",           checked:true},
+    {key:"dokumente",label:"Dokumente-Status",    checked:true},
+    {key:"raucher", label:"Raucher",              checked:false},
+    {key:"religion",label:"Religion",             checked:false},
+    {key:"befreiungen",label:"Befreiungen",       checked:false},
+    {key:"lap",     label:"Vorerhebung LAP",      checked:false},
+    {key:"kommentar",label:"Kommentar",           checked:false},
+  ];
+
+  showModal(`${modeLabel} – Konfiguration`, `
+    <div style="display:flex;flex-direction:column;gap:1.6rem;">
+
+      ${isFiltered ? `
+      <!-- Umfang -->
+      <div class="form-group">
+        <label class="form-label">Welche Schüler?</label>
+        <div style="display:flex;flex-direction:column;gap:0.8rem;">
+          <label style="display:flex;align-items:center;gap:1rem;padding:1rem 1.2rem;border:2px solid var(--accent);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);">
+            <input type="radio" name="exp-scope" value="filtered" checked style="width:1.8rem;height:1.8rem;">
+            <div>
+              <div style="font-weight:600;">Aktuelle Ansicht (${filteredStudents.length} Schüler)</div>
+              <div style="font-size:1.2rem;color:var(--text-muted);">Filter: ${filterLabel}</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:1rem;padding:1rem 1.2rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--bg-card-2);">
+            <input type="radio" name="exp-scope" value="all" style="width:1.8rem;height:1.8rem;">
+            <div>
+              <div style="font-weight:600;">Alle Schüler (${allStudents.length})</div>
+              <div style="font-size:1.2rem;color:var(--text-muted);">Kein Filter</div>
+            </div>
+          </label>
+        </div>
+      </div>` : `
+      <div style="padding:1rem 1.4rem;background:var(--bg-card-2);border-radius:var(--r-sm);color:var(--text-muted);font-size:1.3rem;">
+        Alle ${allStudents.length} Schüler werden ausgegeben (kein Filter aktiv).
+      </div>`}
+
+      <!-- Spalten -->
+      <div class="form-group">
+        <label class="form-label">Spalten auswählen</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+          ${colOptions.map(c=>`
+            <label style="display:flex;align-items:center;gap:0.8rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;">
+              <input type="checkbox" class="exp-col" value="${c.key}" ${c.checked?"checked":""} style="width:1.6rem;height:1.6rem;">
+              <span>${c.label}</span>
+            </label>`).join("")}
+        </div>
+      </div>
+    </div>
+  `, [
+    {label:"Abbrechen", cls:"btn-ghost", onClick: closeModal},
+    {label:modeLabel, cls:"btn-primary", onClick: () => {
+      const scope = document.querySelector("input[name='exp-scope']:checked")?.value || "all";
+      const cols = [...document.querySelectorAll(".exp-col:checked")].map(c=>c.value);
+      const students = (isFiltered && scope==="filtered") ? filteredStudents : allStudents;
+      closeModal();
+      if (mode==="print") printKVFiltered(kv, students, cols);
+      else exportCSVFiltered(kvId, kv, students, cols);
+    }}
+  ], "modal-lg");
+}
+
 function printKV(kvId) {
   const kv=getKVClass(kvId);
   const students=getKVStudents(kvId);
@@ -331,4 +440,91 @@ function printKV(kvId) {
     </tbody></table>
   </body></html>`);
   w.document.close(); w.print();
+}
+
+// ── Filter-aware print & CSV ──────────────────────────────────────
+function printKVFiltered(kv, students, cols) {
+  const has = k => cols.includes(k);
+  const ds = {0:"[ ]",1:"[X]",2:"[-]"};
+  const headers = [
+    has("name")     && "<th>Nachname</th><th>Vorname</th><th>Geb.</th>",
+    has("alter")    && "<th>Alter</th><th>Ü18</th>",
+    has("spind")    && "<th>Spind</th>",
+    has("schulgeld")&& "<th>BAR</th><th>KARTE</th><th>Summe</th>",
+    has("dokumente")&& DOC_KEYS.map(k=>`<th>${DOC_LABELS[k]}</th>`).join(""),
+    has("raucher")  && "<th>Raucher</th>",
+    has("religion") && "<th>Religion</th>",
+    has("befreiungen")&&"<th>Befreiungen</th>",
+    has("lap")      && "<th>LAP</th>",
+    has("kommentar")&& "<th>Kommentar</th>",
+  ].filter(Boolean).join("");
+
+  const rows = students.map(s => {
+    const summe = (s.schulgeldBar||0)+(s.schulgeldKarte||0);
+    const age = calculateAge(s.geburtsdatum);
+    const ue18 = isEigenberechtigt(s.geburtsdatum);
+    return "<tr>"+ [
+      has("name")      && `<td><strong>${escHtml(s.nachname||s.lastName)}</strong></td><td>${escHtml(s.vorname||s.firstName)}</td><td>${s.geburtsdatum?new Date(s.geburtsdatum).toLocaleDateString("de-AT"):"-"}</td>`,
+      has("alter")     && `<td>${age!==null?age:"-"}</td><td>${ue18?"J":"N"}</td>`,
+      has("spind")     && `<td>${s.spindNr??"-"}</td>`,
+      has("schulgeld") && `<td>${s.schulgeldBar||0}</td><td>${s.schulgeldKarte||0}</td><td>${summe>0?summe+" EUR":"Offen"}</td>`,
+      has("dokumente") && DOC_KEYS.map(k=>`<td>${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join(""),
+      has("raucher")   && `<td>${s.raucher?"Ja":"Nein"}</td>`,
+      has("religion")  && `<td>${escHtml(s.religion||"")}</td>`,
+      has("befreiungen")&&`<td>${escHtml(s.befreiungen||"")}</td>`,
+      has("lap")       && `<td>${s.vorerhebungLAP?"Ja":"Nein"}</td>`,
+      has("kommentar") && `<td>${escHtml(s.kommentar||"")}</td>`,
+    ].filter(Boolean).join("") +"</tr>";
+  }).join("");
+
+  const w = window.open("","_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${kv.name}</title>
+    <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h1{font-size:14px;}
+    table{width:100%;border-collapse:collapse;}th{background:#f0f0f0;padding:4px;border:1px solid #ccc;font-size:8px;}
+    td{padding:4px;border:1px solid #ddd;}tr:nth-child(even) td{background:#fafafa;}</style>
+  </head><body>
+    <h1>${escHtml(kv.name)} &mdash; ${students.length} Schüler &mdash; ${new Date().toLocaleDateString("de-AT")}</h1>
+    <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>
+  </body></html>`);
+  w.document.close(); w.print();
+}
+
+function exportCSVFiltered(kvId, kv, students, cols) {
+  const has = k => cols.includes(k);
+  const ds = {0:"Offen",1:"Erledigt",2:"Nicht erforderlich"};
+  const headers = [
+    has("name")      && ["Nachname","Vorname","Geburtsdatum"],
+    has("alter")     && ["Alter","Ue18"],
+    has("spind")     && ["Spind-Nr."],
+    has("schulgeld") && ["Schulgeld BAR","Schulgeld KARTE","Summe Schulgeld"],
+    has("dokumente") && DOC_KEYS.map(k=>DOC_LABELS[k]),
+    has("raucher")   && ["Raucher"],
+    has("religion")  && ["Religion"],
+    has("befreiungen")&&["Befreiungen"],
+    has("lap")       && ["Vorerhebung LAP"],
+    has("kommentar") && ["Kommentar"],
+  ].filter(Boolean).flat();
+
+  const rows = [headers, ...students.map(s => {
+    const summe = (s.schulgeldBar||0)+(s.schulgeldKarte||0);
+    const age = calculateAge(s.geburtsdatum);
+    return [
+      has("name")      && [s.nachname||s.lastName, s.vorname||s.firstName, s.geburtsdatum||""],
+      has("alter")     && [age!==null?age:"", isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein"],
+      has("spind")     && [s.spindNr??""],
+      has("schulgeld") && [s.schulgeldBar||0, s.schulgeldKarte||0, summe],
+      has("dokumente") && DOC_KEYS.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),
+      has("raucher")   && [s.raucher?"Ja":"Nein"],
+      has("religion")  && [s.religion||""],
+      has("befreiungen")&&[s.befreiungen||""],
+      has("lap")       && [s.vorerhebungLAP?"Ja":"Nein"],
+      has("kommentar") && [s.kommentar||""],
+    ].filter(Boolean).flat();
+  })];
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=`${kv.name}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast("CSV exportiert","success");
 }

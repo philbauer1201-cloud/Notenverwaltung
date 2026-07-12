@@ -1,4 +1,4 @@
-﻿/**
+/**
  * kvStudentView.js - KV Schueler-Detailansicht
  * 4 Tabs: Stammdaten / Finanzen / Dokumente / Zusatz
  */
@@ -116,8 +116,9 @@ export function renderKVStudentView(container, kvId, studentId) {
           <div class="form-hint">Wird automatisch berechnet (Geburtsdatum + 18 Jahre)</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Schueler-ID</label>
-          <input type="text" value="${escHtml(student.id)}" disabled style="opacity:0.5;font-family:'JetBrains Mono',monospace;font-size:1.2rem;">
+          <label class="form-label">Schulinterne Nr. <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <input type="text" id="s-schulnr" value="${escHtml(student.schulNr||"")}" placeholder="z.B. 2025-042">
+          <div class="form-hint">Eigene Kennung der Schule (z.B. Schüler-Nummer aus dem Schulverwaltungsprogramm)</div>
         </div>
       </div>
     </div>
@@ -340,9 +341,11 @@ export function renderKVStudentView(container, kvId, studentId) {
     const religion = relSelect==="Sonstige"&&relTxt ? relTxt : relSelect;
     const befreiungen = document.getElementById("s-befreiungen")?.value||"";
     const kommentar = document.getElementById("s-kommentar")?.value||"";
+    const schulNr = document.getElementById("s-schulnr")?.value.trim()||"";
     if(!nn||!vn) return showToast("Nachname und Vorname erforderlich","error");
     updateStudent(studentId, {
       nachname:nn, vorname:vn, firstName:vn, lastName:nn, geburtsdatum:geb,
+      schulNr,
       spindNr: spind!==null&&spind!==""?parseInt(spind):null,
       schlossBezahlt:schloss, schulgeldBar:bar, schulgeldKarte:karte,
       raucher, vorerhebungLAP:lap, religion, befreiungen, kommentar
