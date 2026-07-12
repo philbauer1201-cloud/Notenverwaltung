@@ -693,29 +693,22 @@ function printKV(kvId) {
     </tr></thead><tbody>
       ${students.map(s=>{
         const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
-        return`<tr><td><strong>${escHtml(s.nachname||s.lastName)}</strong><br>${escHtml(s.vorname||s.firstName)}</td>
-          <td>${s.geburtsdatum?new Date(s.geburtsdatum).toLocaleDateString("de-AT"):"-"}</td>
-          <td>${isEigenberechtigt(s.geburtsdatum)?"J":"N"}</td>
-          <td>${s.spindNr??"-"}</td>
-          <td>${summe>0?summe+" EUR":"Offen"}</td>
-          ${DOC_KEYS.map(k=>`<td style="text-align:center;">${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join("")}
-          <td>${s.raucher?"Ja":"Nein"}</td><td>${escHtml(s.kommentar||"")}</td></tr>`;
-      }).join("")}
-    </tbody></table>
-  </body></html>`);
-  w.document.close(); w.print();
-}
-
 // ── Filter-aware print & CSV ──────────────────────────────────────
-function printKVFiltered(kv, students, cols) {
+function printKVFiltered(kv, students, cols, activeDocKeys = []) {
   const has = k => cols.includes(k);
   const ds = {0:"[ ]",1:"[X]",2:"[-]"};
+  
+  // If "dokumente" is enabled, check if we should print all or only selected doc columns
+  const docsToPrint = (has("dokumente") && activeDocKeys.length > 0)
+    ? activeDocKeys 
+    : (has("dokumente") ? DOC_KEYS : []);
+
   const headers = [
     has("name")     && "<th>Nachname</th><th>Vorname</th><th>Geb.</th>",
     has("alter")    && "<th>Alter</th><th>Ü18</th>",
     has("spind")    && "<th>Spind</th>",
     has("schulgeld")&& "<th>BAR</th><th>KARTE</th><th>Summe</th>",
-    has("dokumente")&& DOC_KEYS.map(k=>`<th>${DOC_LABELS[k]}</th>`).join(""),
+    docsToPrint.map(k=>`<th>${DOC_LABELS[k]}</th>`).join(""),
     has("raucher")  && "<th>Raucher</th>",
     has("religion") && "<th>Religion</th>",
     has("befreiungen")&&"<th>Befreiungen</th>",
@@ -732,7 +725,7 @@ function printKVFiltered(kv, students, cols) {
       has("alter")     && `<td>${age!==null?age:"-"}</td><td>${ue18?"J":"N"}</td>`,
       has("spind")     && `<td>${s.spindNr??"-"}</td>`,
       has("schulgeld") && `<td>${s.schulgeldBar||0}</td><td>${s.schulgeldKarte||0}</td><td>${summe>0?summe+" EUR":"Offen"}</td>`,
-      has("dokumente") && DOC_KEYS.map(k=>`<td>${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join(""),
+      docsToPrint.map(k=>`<td>${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join(""),
       has("raucher")   && `<td>${s.raucher?"Ja":"Nein"}</td>`,
       has("religion")  && `<td>${escHtml(s.religion||"")}</td>`,
       has("befreiungen")&&`<td>${escHtml(s.befreiungen||"")}</td>`,
@@ -753,15 +746,21 @@ function printKVFiltered(kv, students, cols) {
   w.document.close(); w.print();
 }
 
-function exportCSVFiltered(kvId, kv, students, cols) {
+function exportCSVFiltered(kvId, kv, students, cols, activeDocKeys = []) {
   const has = k => cols.includes(k);
   const ds = {0:"Offen",1:"Erledigt",2:"Nicht erforderlich"};
+
+  // If "dokumente" is enabled, check if we should export all or only selected doc columns
+  const docsToPrint = (has("dokumente") && activeDocKeys.length > 0)
+    ? activeDocKeys 
+    : (has("dokumente") ? DOC_KEYS : []);
+
   const headers = [
     has("name")      && ["Nachname","Vorname","Geburtsdatum"],
     has("alter")     && ["Alter","Ue18"],
     has("spind")     && ["Spind-Nr."],
     has("schulgeld") && ["Schulgeld BAR","Schulgeld KARTE","Summe Schulgeld"],
-    has("dokumente") && DOC_KEYS.map(k=>DOC_LABELS[k]),
+    docsToPrint.map(k=>DOC_LABELS[k]),
     has("raucher")   && ["Raucher"],
     has("religion")  && ["Religion"],
     has("befreiungen")&&["Befreiungen"],
@@ -777,7 +776,7 @@ function exportCSVFiltered(kvId, kv, students, cols) {
       has("alter")     && [age!==null?age:"", isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein"],
       has("spind")     && [s.spindNr??""],
       has("schulgeld") && [s.schulgeldBar||0, s.schulgeldKarte||0, summe],
-      has("dokumente") && DOC_KEYS.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),
+      docsToPrint.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),
       has("raucher")   && [s.raucher?"Ja":"Nein"],
       has("religion")  && [s.religion||""],
       has("befreiungen")&&[s.befreiungen||""],
