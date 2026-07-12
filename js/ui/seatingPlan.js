@@ -12,6 +12,10 @@ export function renderSeatingPlan(container, courseId) {
     return;
   }
 
+  // Moving state
+  let movingStudentId = null;
+  let movingSourceKey = null; // "row_col" or null
+
   // Load plan from DB, fallback to default 4x6
   let plan = getSeatingPlan(courseId);
   if (!plan.seats) plan.seats = {};
@@ -31,6 +35,14 @@ export function renderSeatingPlan(container, courseId) {
           <button class="btn btn-ghost" id="btn-print-seating">🖨️ Drucken</button>
           <button class="btn btn-primary" id="btn-save-seating">💾 Sitzordnung speichern</button>
         </div>
+      </div>
+
+      <!-- Moving Instructions Bar -->
+      <div id="seating-move-bar" class="card no-print" style="display:none;background:var(--accent-light);border:1.5px solid var(--accent);padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:600;color:var(--accent);">
+          🔄 Verschiebe-Modus aktiv: Wähle den neuen Platz für <span id="seating-move-name" style="text-decoration:underline;">Schüler</span>.
+        </span>
+        <button class="btn btn-sm btn-ghost" id="btn-cancel-move" style="color:var(--accent);border-color:var(--accent);">Abbrechen</button>
       </div>
 
       <!-- Settings panel (hidden in print) -->
@@ -123,7 +135,7 @@ export function renderSeatingPlan(container, courseId) {
             : '';
 
           gridHTML += `
-            <div class="seat-card occupied" data-row="${r}" data-col="${c}" style="border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--bg-card-2);padding:10px;text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div class="seat-card occupied" data-row="${r}" data-col="${c}" style="border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--bg-card-2);padding:10px;text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;">
               <button class="btn-remove-seat no-print" data-row="${r}" data-col="${c}" title="Platz leeren" style="position:absolute;top:4px;right:4px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.75rem">×</button>
               ${student.photo
                 ? `<img src="${student.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--accent);flex-shrink:0;">`
@@ -150,16 +162,86 @@ export function renderSeatingPlan(container, courseId) {
 
     grid.innerHTML = gridHTML;
 
-    // Bind Empty Seats
-    grid.querySelectorAll('.seat-card.empty').forEach(card => {
-      card.addEventListener('click', () => {
+    // Toggle moving info banner
+    const moveBar = document.getElementById('seating-move-bar');
+    const moveNameSpan = document.getElementById('seating-move-name');
+    if (moveBar && moveNameSpan) {
+      if (movingStudentId) {
+        const ms = course.students.find(s => s.id === movingStudentId);
+        moveNameSpan.textContent = ms ? `${ms.firstName} ${ms.lastName}` : 'Schüler';
+        moveBar.style.display = 'flex';
+      } else {
+        moveBar.style.display = 'none';
+      }
+    }
+
+    // Bind Seats Click (Occupied and Empty)
+    grid.querySelectorAll('.seat-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // If clicking the little cross, skip this handler
+        if (e.target.classList.contains('btn-remove-seat')) return;
+
         const row = parseInt(card.dataset.row);
         const col = parseInt(card.dataset.col);
-        assignSeatPopover(row, col);
+        const key = `${row}_${col}`;
+        const currentStudentId = plan.seats[key];
+
+        if (movingStudentId) {
+          // WE ARE IN MOVE MODE
+          if (currentStudentId) {
+            // Target is occupied -> SWAP!
+            if (movingSourceKey) {
+              plan.seats[movingSourceKey] = currentStudentId;
+            } else {
+              // Placed from unassigned list onto occupied -> push previous student back to unassigned
+              showToast('Schüler ausgetauscht', 'info');
+            }
+            plan.seats[key] = movingStudentId;
+          } else {
+            // Target is empty -> Place here, clear old if applicable
+            plan.seats[key] = movingStudentId;
+            if (movingSourceKey) {
+              delete plan.seats[movingSourceKey];
+            }
+          }
+          movingStudentId = null;
+          movingSourceKey = null;
+          renderGrid();
+          showToast('Sitzplan aktualisiert', 'success');
+        } else {
+          // WE ARE IN NORMAL MODE
+          if (currentStudentId) {
+            // Clicked occupied: Ask to move or remove
+            const student = course.students.find(s => s.id === currentStudentId);
+            showModal(
+              `${escHtml(student.firstName)} ${escHtml(student.lastName)}`,
+              `<p style="font-size:1.2rem;margin-bottom:1rem;">Möchtest du diesen Schüler umsetzen oder den Sitzplatz freigeben?</p>`,
+              [
+                { label: 'Schüler umsetzen 🔄', cls: 'btn-primary', onClick: () => {
+                    movingStudentId = currentStudentId;
+                    movingSourceKey = key;
+                    closeModal();
+                    renderGrid();
+                  }
+                },
+                { label: 'Platz freigeben 🗑️', cls: 'btn-danger', onClick: () => {
+                    delete plan.seats[key];
+                    closeModal();
+                    renderGrid();
+                  }
+                },
+                { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() }
+              ]
+            );
+          } else {
+            // Clicked empty: Standard Popover
+            assignSeatPopover(row, col);
+          }
+        }
       });
     });
 
-    // Bind Remove Buttons
+    // Bind Remove Buttons (fallback cross)
     grid.querySelectorAll('.btn-remove-seat').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -172,6 +254,13 @@ export function renderSeatingPlan(container, courseId) {
     // Render Unassigned List
     renderUnassignedList();
   }
+
+  // Cancel Move handler
+  document.getElementById('btn-cancel-move')?.addEventListener('click', () => {
+    movingStudentId = null;
+    movingSourceKey = null;
+    renderGrid();
+  });
 
   function renderUnassignedList() {
     const list = document.getElementById('unassigned-students-list');
@@ -199,23 +288,50 @@ export function renderSeatingPlan(container, courseId) {
     list.querySelectorAll('.btn-assign-student').forEach(span => {
       span.addEventListener('click', () => {
         const studentId = span.dataset.id;
-        // Find first empty seat
-        let found = false;
-        for (let r = 0; r < plan.rows; r++) {
-          for (let c = 0; c < plan.cols; c++) {
-            const key = `${r}_${c}`;
-            if (!plan.seats[key]) {
-              plan.seats[key] = studentId;
-              found = true;
-              break;
-            }
-          }
-          if (found) break;
-        }
-        if (!found) {
-          showToast('Keine freien Plätze mehr im Raster. Erhöhe die Zeilen oder Spalten!', 'warning');
-        } else {
+        
+        if (movingStudentId) {
+          // If we click another student while moving, switch target
+          movingStudentId = studentId;
+          movingSourceKey = null;
           renderGrid();
+        } else {
+          // Standard auto-place or start move
+          const student = course.students.find(s => s.id === studentId);
+          showModal(
+            `${escHtml(student.firstName)} ${escHtml(student.lastName)}`,
+            `<p style="font-size:1.2rem;margin-bottom:1rem;">Wie möchtest du diesen Schüler platzieren?</p>`,
+            [
+              { label: 'Automatisch auf freien Platz setzen', cls: 'btn-primary', onClick: () => {
+                  let found = false;
+                  for (let r = 0; r < plan.rows; r++) {
+                    for (let c = 0; c < plan.cols; c++) {
+                      const key = `${r}_${c}`;
+                      if (!plan.seats[key]) {
+                        plan.seats[key] = studentId;
+                        found = true;
+                        break;
+                      }
+                    }
+                    if (found) break;
+                  }
+                  closeModal();
+                  if (!found) {
+                    showToast('Keine freien Plätze mehr im Raster. Erhöhe die Zeilen oder Spalten!', 'warning');
+                  } else {
+                    renderGrid();
+                  }
+                }
+              },
+              { label: 'Manuell auf Platz platzieren (Verschieben)', cls: 'btn-ghost', onClick: () => {
+                  movingStudentId = studentId;
+                  movingSourceKey = null;
+                  closeModal();
+                  renderGrid();
+                }
+              },
+              { label: 'Abbrechen', cls: 'btn-ghost', onClick: () => closeModal() }
+            ]
+          );
         }
       });
     });
