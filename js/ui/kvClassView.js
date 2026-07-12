@@ -102,15 +102,22 @@ function renderContent(container, kvId, state) {
     case "ue18":    students = students.filter(s => isEigenberechtigt(s.geburtsdatum)); break;
   }
 
-  // Checkbox-based Document checklist multi-filter
-  Object.keys(state.docFilterObj).forEach(key => {
-    const filterVal = state.docFilterObj[key]; // 'done' or 'open'
-    if (filterVal === "done") {
-      students = students.filter(s => (s.dokumente||{})[key] === 1 || (s.dokumente||{})[key] === 2);
-    } else if (filterVal === "open") {
-      students = students.filter(s => (s.dokumente||{})[key] === 0);
-    }
-  });
+  // Checkbox-based Document checklist multi-filter (OR logic)
+  const activeFilters = Object.keys(state.docFilterObj).filter(k => !!state.docFilterObj[k]);
+  if (activeFilters.length > 0) {
+    const mode = state.docFilterMode || "open"; // "open" or "done"
+    students = students.filter(s => {
+      // Check if at least one of the active filters matches this student
+      return activeFilters.some(key => {
+        const val = (s.dokumente||{})[key] || 0;
+        if (mode === "done") {
+          return val === 1 || val === 2; // Erledigt or Nicht erforderlich
+        } else {
+          return val === 0; // Offen
+        }
+      });
+    });
+  }
 
   students = [...students].sort((a,b) => state.sort==="spind" ? (a.spindNr||999)-(b.spindNr||999)
     : ((a.nachname||a.lastName)+(a.vorname||a.firstName)).localeCompare((b.nachname||b.lastName)+(b.vorname||b.firstName),"de"));
@@ -181,24 +188,34 @@ function renderContent(container, kvId, state) {
             📋 Dokumente-Filter ${activeDocCount > 0 ? `(${activeDocCount})` : ""} ▾
           </button>
           
-          <div id="doc-popover-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:32rem;max-height:45rem;overflow-y:auto;padding:1.2rem;box-shadow:var(--shadow-lg);display:none;flex-direction:column;gap:0.8rem;">
-            <div style="font-weight:700;font-size:1.25rem;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center;">
-              <span>Dokumente filtern</span>
+          <div id="doc-popover-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:32rem;max-height:45rem;overflow-y:auto;padding:1.4rem;box-shadow:var(--shadow-lg);display:none;flex-direction:column;gap:1rem;">
+            <div style="font-weight:700;font-size:1.25rem;display:flex;justify-content:space-between;align-items:center;">
+              <span>Dokumente filtern (ODER)</span>
               <button class="btn btn-ghost btn-sm" id="btn-reset-doc-filters" style="font-size:1.1rem;padding:0.2rem 0.6rem;">Zurücksetzen</button>
             </div>
             
-            ${DOC_KEYS.map(k => {
-              const currentVal = state.docFilterObj[k] || "all";
-              return `
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0;border-bottom:1px solid var(--border-light);">
-                <span style="font-size:1.25rem;font-weight:500;margin-right:1rem;">${DOC_LABELS[k]}</span>
-                <div style="display:flex;gap:0.4rem;">
-                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="all"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="all">Alle</button>
-                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="done"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="done">Erledigt</button>
-                  <button class="btn btn-xs doc-pop-filter-btn ${currentVal==="open"?"btn-primary":"btn-ghost"}" data-key="${k}" data-val="open">Offen</button>
-                </div>
-              </div>`;
-            }).join("")}
+            <!-- Modus-Auswahl -->
+            <div style="display:flex;gap:1rem;background:var(--bg-card-2);padding:0.6rem 0.8rem;border-radius:var(--r-sm);border:1px solid var(--border-light);">
+              <label style="display:flex;align-items:center;gap:0.6rem;font-size:1.2rem;cursor:pointer;">
+                <input type="radio" name="doc-filter-mode" value="open" ${state.docFilterMode!=="done"?"checked":""} style="width:1.5rem;height:1.5rem;">
+                <span>Ausgewählte FEHLEN (Offen)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:0.6rem;font-size:1.2rem;cursor:pointer;">
+                <input type="radio" name="doc-filter-mode" value="done" ${state.docFilterMode==="done"?"checked":""} style="width:1.5rem;height:1.5rem;">
+                <span>Ausgewählte ERLEDIGT</span>
+              </label>
+            </div>
+            
+            <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.4rem;">
+              ${DOC_KEYS.map(k => {
+                const isChecked = !!state.docFilterObj[k];
+                return `
+                <label style="display:flex;align-items:center;gap:1rem;padding:0.6rem 0.8rem;border:1px solid ${isChecked?'var(--accent)':'var(--border-light)'};background:${isChecked?'var(--accent-light)':'transparent'};border-radius:var(--r-sm);cursor:pointer;transition:all var(--t-fast);">
+                  <input type="checkbox" class="doc-pop-checkbox" data-key="${k}" ${isChecked?"checked":""} style="width:1.6rem;height:1.6rem;">
+                  <span style="font-size:1.25rem;font-weight:500;">${DOC_LABELS[k]}</span>
+                </label>`;
+              }).join("")}
+            </div>
           </div>
         </div>
 
@@ -297,21 +314,30 @@ function renderContent(container, kvId, state) {
   popoverMenu?.addEventListener("click", e => e.stopPropagation());
   document.addEventListener("click", () => { if (popoverMenu) popoverMenu.style.display = "none"; }, {once: true});
 
-  // Handle doc filter change
-  container.querySelectorAll(".doc-pop-filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.key;
-      const val = btn.dataset.val;
+  // Handle doc filter checkbox change
+  container.querySelectorAll(".doc-pop-checkbox").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const key = cb.dataset.key;
       const newObj = {...state.docFilterObj};
-      if (val === "all") delete newObj[key];
-      else newObj[key] = val;
+      if (cb.checked) {
+        newObj[key] = true;
+      } else {
+        delete newObj[key];
+      }
       renderContent(container, kvId, {...state, docFilterObj: newObj});
+    });
+  });
+
+  // Handle doc filter mode change (open vs done)
+  container.querySelectorAll("input[name='doc-filter-mode']").forEach(radio => {
+    radio.addEventListener("change", e => {
+      renderContent(container, kvId, {...state, docFilterMode: e.target.value});
     });
   });
 
   // Reset doc filters
   container.querySelector("#btn-reset-doc-filters")?.addEventListener("click", () => {
-    renderContent(container, kvId, {...state, docFilterObj: {}});
+    renderContent(container, kvId, {...state, docFilterObj: {}, docFilterMode: "open"});
   });
 
   container.querySelector("#kv-sort")?.addEventListener("change", e =>
