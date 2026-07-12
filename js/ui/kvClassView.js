@@ -182,41 +182,11 @@ function renderContent(container, kvId, state) {
           <option value="ue18" ${state.generalFilter==="ue18"?"selected":""}>Schüler: Ü18</option>
         </select>
 
-        <!-- Multi-Checklist Filter (Inline Popover Trigger) -->
-        <div style="position:relative;">
+        <!-- Multi-Checklist Filter (Modal Trigger) -->
+        <div>
           <button class="btn btn-ghost btn-sm" id="btn-doc-popover" style="padding:0.7rem 1.2rem;border:1px solid var(--border-md);font-size:1.32rem;">
             📋 Dokumente-Filter ${activeDocCount > 0 ? `(${activeDocCount})` : ""} ▾
           </button>
-          
-          <div id="doc-popover-menu" style="display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);z-index:9999;min-width:32rem;max-height:45rem;overflow-y:auto;padding:1.4rem;box-shadow:var(--shadow-lg);display:none;flex-direction:column;gap:1rem;">
-            <div style="font-weight:700;font-size:1.25rem;display:flex;justify-content:space-between;align-items:center;">
-              <span>Dokumente filtern (ODER)</span>
-              <button class="btn btn-ghost btn-sm" id="btn-reset-doc-filters" style="font-size:1.1rem;padding:0.2rem 0.6rem;">Zurücksetzen</button>
-            </div>
-            
-            <!-- Modus-Auswahl -->
-            <div style="display:flex;gap:1rem;background:var(--bg-card-2);padding:0.6rem 0.8rem;border-radius:var(--r-sm);border:1px solid var(--border-light);">
-              <label style="display:flex;align-items:center;gap:0.6rem;font-size:1.2rem;cursor:pointer;">
-                <input type="radio" name="doc-filter-mode" value="open" ${state.docFilterMode!=="done"?"checked":""} style="width:1.5rem;height:1.5rem;">
-                <span>Ausgewählte FEHLEN (Offen)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:0.6rem;font-size:1.2rem;cursor:pointer;">
-                <input type="radio" name="doc-filter-mode" value="done" ${state.docFilterMode==="done"?"checked":""} style="width:1.5rem;height:1.5rem;">
-                <span>Ausgewählte ERLEDIGT</span>
-              </label>
-            </div>
-            
-            <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.4rem;">
-              ${DOC_KEYS.map(k => {
-                const isChecked = !!state.docFilterObj[k];
-                return `
-                <label style="display:flex;align-items:center;gap:1rem;padding:0.6rem 0.8rem;border:1px solid ${isChecked?'var(--accent)':'var(--border-light)'};background:${isChecked?'var(--accent-light)':'transparent'};border-radius:var(--r-sm);cursor:pointer;transition:all var(--t-fast);">
-                  <input type="checkbox" class="doc-pop-checkbox" data-key="${k}" ${isChecked?"checked":""} style="width:1.6rem;height:1.6rem;">
-                  <span style="font-size:1.25rem;font-weight:500;">${DOC_LABELS[k]}</span>
-                </label>`;
-              }).join("")}
-            </div>
-          </div>
         </div>
 
         <!-- Sortierung -->
@@ -295,49 +265,9 @@ function renderContent(container, kvId, state) {
     renderContent(container, kvId, {...state, generalFilter: e.target.value});
   });
 
-  // Doc filter Popover Toggle
-  const popoverBtn = container.querySelector("#btn-doc-popover");
-  const popoverMenu = container.querySelector("#doc-popover-menu");
-  popoverBtn?.addEventListener("click", e => {
-    e.stopPropagation();
-    if (popoverMenu.style.display === "none" || !popoverMenu.style.display) {
-      const rect = popoverBtn.getBoundingClientRect();
-      popoverMenu.style.top = (rect.bottom + 4) + "px";
-      popoverMenu.style.left = rect.left + "px";
-      popoverMenu.style.display = "flex";
-    } else {
-      popoverMenu.style.display = "none";
-    }
-  });
-
-  // Prevent closing when clicking inside popover
-  popoverMenu?.addEventListener("click", e => e.stopPropagation());
-  document.addEventListener("click", () => { if (popoverMenu) popoverMenu.style.display = "none"; }, {once: true});
-
-  // Handle doc filter checkbox change
-  container.querySelectorAll(".doc-pop-checkbox").forEach(cb => {
-    cb.addEventListener("change", () => {
-      const key = cb.dataset.key;
-      const newObj = {...state.docFilterObj};
-      if (cb.checked) {
-        newObj[key] = true;
-      } else {
-        delete newObj[key];
-      }
-      renderContent(container, kvId, {...state, docFilterObj: newObj});
-    });
-  });
-
-  // Handle doc filter mode change (open vs done)
-  container.querySelectorAll("input[name='doc-filter-mode']").forEach(radio => {
-    radio.addEventListener("change", e => {
-      renderContent(container, kvId, {...state, docFilterMode: e.target.value});
-    });
-  });
-
-  // Reset doc filters
-  container.querySelector("#btn-reset-doc-filters")?.addEventListener("click", () => {
-    renderContent(container, kvId, {...state, docFilterObj: {}, docFilterMode: "open"});
+  // Doc filter Modal Trigger
+  container.querySelector("#btn-doc-popover")?.addEventListener("click", () => {
+    showDocFilterModal(kvId, container, state);
   });
 
   container.querySelector("#kv-sort")?.addEventListener("change", e =>
@@ -394,6 +324,73 @@ function renderContent(container, kvId, state) {
         renderContent(container, kvId, state);
       }
     }));
+}
+
+
+// ── Document Checklist Filter Modal ────────────────────────────────
+function showDocFilterModal(kvId, container, state) {
+  const currentMode = state.docFilterMode || "open";
+  const currentObj = state.docFilterObj || {};
+
+  showModal("Dokumente filtern (ODER-Verknüpfung)", `
+    <div style="display:flex;flex-direction:column;gap:1.6rem;">
+      <div class="form-group">
+        <label class="form-label">Zustand der Dokumente</label>
+        <div style="display:flex;gap:1.6rem;background:var(--bg-card-2);padding:1rem 1.2rem;border-radius:var(--r-sm);border:1px solid var(--border-light);">
+          <label style="display:flex;align-items:center;gap:0.8rem;font-size:1.3rem;cursor:pointer;">
+            <input type="radio" name="modal-doc-filter-mode" value="open" ${currentMode==="open"?"checked":""} style="width:1.8rem;height:1.8rem;">
+            <span>Ausgewählte <strong>FEHLEN (Offen)</strong></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:0.8rem;font-size:1.3rem;cursor:pointer;">
+            <input type="radio" name="modal-doc-filter-mode" value="done" ${currentMode==="done"?"checked":""} style="width:1.8rem;height:1.8rem;">
+            <span>Ausgewählte <strong>ERLEDIGT</strong></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Dokumente auswählen</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;">
+          ${DOC_KEYS.map(k => {
+            const isChecked = !!currentObj[k];
+            return `
+            <label style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1rem;border:1px solid ${isChecked?'var(--accent)':'var(--border-light)'};background:${isChecked?'var(--accent-light)':'transparent'};border-radius:var(--r-sm);cursor:pointer;transition:all var(--t-fast);" class="modal-doc-label">
+              <input type="checkbox" class="modal-doc-checkbox" data-key="${k}" ${isChecked?"checked":""} style="width:1.8rem;height:1.8rem;">
+              <span style="font-size:1.3rem;font-weight:500;">${DOC_LABELS[k]}</span>
+            </label>`;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `, [
+    { label: "Zurücksetzen", cls: "btn-ghost", onClick: () => {
+      closeModal();
+      renderContent(container, kvId, { ...state, docFilterObj: {}, docFilterMode: "open" });
+      showToast("Filter zurückgesetzt", "info");
+    }},
+    { label: "Filter anwenden", cls: "btn-primary", onClick: () => {
+      const mode = document.querySelector("input[name='modal-doc-filter-mode']:checked")?.value || "open";
+      const newObj = {};
+      document.querySelectorAll(".modal-doc-checkbox:checked").forEach(cb => {
+        newObj[cb.dataset.key] = true;
+      });
+      closeModal();
+      renderContent(container, kvId, { ...state, docFilterObj: newObj, docFilterMode: mode });
+    }}
+  ], "modal-lg");
+
+  // Visual toggle on checkbox click inside modal
+  setTimeout(() => {
+    document.querySelectorAll(".modal-doc-checkbox").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const lbl = cb.closest(".modal-doc-label");
+        if (lbl) {
+          lbl.style.borderColor = cb.checked ? "var(--accent)" : "var(--border-light)";
+          lbl.style.background = cb.checked ? "var(--accent-light)" : "transparent";
+        }
+      });
+    });
+  }, 50);
 }
 
 function showAssignModal(kvId, container) {
