@@ -599,29 +599,25 @@ function exportCSV(kvId) {
     const age=calculateAge(s.geburtsdatum);
     const summe=(s.schulgeldBar||0)+(s.schulgeldKarte||0);
     return[s.nachname||s.lastName,s.vorname||s.firstName,s.geburtsdatum||"",age!==null?age:"",isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein",s.spindNr??"",s.schlossBezahlt?"Ja":"Nein",s.schulgeldBar||0,s.schulgeldKarte||0,summe,...DOC_KEYS.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),s.raucher?"Ja":"Nein",s.religion||"",s.befreiungen||"",s.vorerhebungLAP?"Ja":"Nein",s.kommentar||""];
-  })];
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download=`${kv.name}_KV_${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  showToast("CSV exportiert","success");
-}
-
 // ── Export Dialog ─────────────────────────────────────────────────
 function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, isFiltered, mode) {
   const modeLabel = mode === "print" ? "Drucken" : "CSV exportieren";
+  const state = document.getElementById("kv-class-content")?.parentElement?._kvState || {};
+  
+  // Find active doc filters in UI
+  const activeDocKeys = Object.keys(state.docFilterObj || {}).filter(k => !!state.docFilterObj[k]);
+  const hasActiveDocFilters = activeDocKeys.length > 0;
+
   const colOptions = [
-    {key:"name",    label:"Name / Geburtsdatum", checked:true},
-    {key:"alter",   label:"Alter & Ü18",         checked:true},
-    {key:"spind",   label:"Spind-Nr.",            checked:true},
-    {key:"schulgeld",label:"Schulgeld",           checked:true},
-    {key:"dokumente",label:"Dokumente-Status",    checked:true},
-    {key:"raucher", label:"Raucher",              checked:false},
-    {key:"religion",label:"Religion",             checked:false},
+    {key:"name",       label:"Name / Geburtsdatum", checked:true},
+    {key:"alter",      label:"Alter & Ü18",         checked:true},
+    {key:"spind",      label:"Spind-Nr.",            checked:true},
+    {key:"schulgeld",  label:"Schulgeld",           checked:true},
+    {key:"raucher",    label:"Raucher",              checked:state.generalFilter === "raucher"},
+    {key:"religion",   label:"Religion",             checked:false},
     {key:"befreiungen",label:"Befreiungen",       checked:false},
-    {key:"lap",     label:"Vorerhebung LAP",      checked:false},
-    {key:"kommentar",label:"Kommentar",           checked:false},
+    {key:"lap",        label:"Vorerhebung LAP",      checked:false},
+    {key:"kommentar",  label:"Kommentar",           checked:false},
   ];
 
   showModal(`${modeLabel} – Konfiguration`, `
@@ -654,7 +650,7 @@ function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, 
 
       <!-- Spalten -->
       <div class="form-group">
-        <label class="form-label">Spalten auswählen</label>
+        <label class="form-label">Allgemeine Spalten auswählen</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
           ${colOptions.map(c=>`
             <label style="display:flex;align-items:center;gap:0.8rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;">
@@ -663,31 +659,46 @@ function showExportDialog(kvId, kv, filteredStudents, allStudents, filterLabel, 
             </label>`).join("")}
         </div>
       </div>
+
+      <!-- Dokumente Spalten -->
+      <div class="form-group">
+        <label class="form-label">Dokumente / Checkliste im Export</label>
+        <div style="font-size:1.2rem;color:var(--text-muted);margin-bottom:0.6rem;">
+          ${hasActiveDocFilters ? "⚠️ Filter aktiv: Nur gefilterte Dokumente sind vorausgewählt." : "Alle Dokumente vorausgewählt."}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+          ${DOC_KEYS.map(k => {
+            const isChecked = !hasActiveDocFilters || activeDocKeys.includes(k);
+            return `
+            <label style="display:flex;align-items:center;gap:0.8rem;padding:0.8rem 1rem;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;">
+              <input type="checkbox" class="exp-doc-col" value="${k}" ${isChecked?"checked":""} style="width:1.6rem;height:1.6rem;">
+              <span>${DOC_LABELS[k]}</span>
+            </label>`;
+          }).join("")}
+        </div>
+      </div>
+
     </div>
   `, [
     {label:"Abbrechen", cls:"btn-ghost", onClick: closeModal},
     {label:modeLabel, cls:"btn-primary", onClick: () => {
       const scope = document.querySelector("input[name='exp-scope']:checked")?.value || "all";
       const cols = [...document.querySelectorAll(".exp-col:checked")].map(c=>c.value);
+      const docs = [...document.querySelectorAll(".exp-doc-col:checked")].map(c=>c.value);
       const students = (isFiltered && scope==="filtered") ? filteredStudents : allStudents;
+      
       closeModal();
-      if (mode==="print") printKVFiltered(kv, students, cols);
-      else exportCSVFiltered(kvId, kv, students, cols);
+      if (mode==="print") printKVFiltered(kv, students, cols, docs);
+      else exportCSVFiltered(kvId, kv, students, cols, docs);
     }}
   ], "modal-lg");
 }
 
-
-
-function printKVFiltered(kv, students, cols, activeDocKeys = []) {
+// ── Filter-aware print & CSV ──────────────────────────────────────
+function printKVFiltered(kv, students, cols, docsToPrint = []) {
   const has = k => cols.includes(k);
   const ds = {0:"[ ]",1:"[X]",2:"[-]"};
   
-  // If "dokumente" is enabled, check if we should print all or only selected doc columns
-  const docsToPrint = (has("dokumente") && activeDocKeys.length > 0)
-    ? activeDocKeys 
-    : (has("dokumente") ? DOC_KEYS : []);
-
   const headers = [
     has("name")     && "<th>Nachname</th><th>Vorname</th><th>Geb.</th>",
     has("alter")    && "<th>Alter</th><th>Ü18</th>",
@@ -731,14 +742,9 @@ function printKVFiltered(kv, students, cols, activeDocKeys = []) {
   w.document.close(); w.print();
 }
 
-function exportCSVFiltered(kvId, kv, students, cols, activeDocKeys = []) {
+function exportCSVFiltered(kvId, kv, students, cols, docsToPrint = []) {
   const has = k => cols.includes(k);
   const ds = {0:"Offen",1:"Erledigt",2:"Nicht erforderlich"};
-
-  // If "dokumente" is enabled, check if we should export all or only selected doc columns
-  const docsToPrint = (has("dokumente") && activeDocKeys.length > 0)
-    ? activeDocKeys 
-    : (has("dokumente") ? DOC_KEYS : []);
 
   const headers = [
     has("name")      && ["Nachname","Vorname","Geburtsdatum"],
