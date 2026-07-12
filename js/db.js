@@ -298,6 +298,8 @@ export function createStudent(courseId, data) {
     // ensure sync
     nachname: data.nachname || data.lastName  || '',
     vorname:  data.vorname  || data.firstName || '',
+    birthDate: data.birthDate || data.geburtsdatum || null,
+    geburtsdatum: data.geburtsdatum || data.birthDate || null,
     dokumente: { ...kvStudentDefaults().dokumente, ...(data.dokumente || {}) },
     kvClassIds: data.kvClassIds || []
   };
@@ -321,7 +323,13 @@ export function updateStudent(studentId, data) {
   if (data.nachname !== undefined) data.lastName  = data.nachname;
   if (data.firstName !== undefined) data.vorname  = data.firstName;
   if (data.lastName  !== undefined) data.nachname = data.lastName;
+  
+  // Sync birthDate ↔ geburtsdatum
+  if (data.geburtsdatum !== undefined) data.birthDate = data.geburtsdatum;
+  if (data.birthDate !== undefined) data.geburtsdatum = data.birthDate;
+
   db.students[idx] = {
+
     ...db.students[idx],
     ...data,
     dokumente: { ...db.students[idx].dokumente, ...(data.dokumente || {}) }
