@@ -601,7 +601,10 @@ function gradingRow(student, assessment, course, dims, isSimple) {
     <tr data-student-id="${student.id}">
       <td>
         <div class="flex items-center gap-2">
-          <div class="student-avatar" style="width:28px;height:28px;font-size:.7rem;flex-shrink:0">${initials}</div>
+          ${student.photo
+            ? `<img src="${student.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--accent);flex-shrink:0;">`
+            : `<div class="student-avatar" style="width:28px;height:28px;font-size:.7rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-card-3);border:1px solid var(--border);border-radius:50%;font-weight:700;">${initials}</div>`
+          }
           <span style="font-size:.85rem;font-weight:600">${escHtml(student.lastName)}, ${escHtml(student.firstName)}</span>
         </div>
       </td>
