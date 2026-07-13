@@ -128,7 +128,7 @@ export function renderKVStudentView(container, kvId, studentId) {
 
     <!-- Tab: Finanzen -->
     <div class="tab-panel" id="tab-finanzen">
-      <div class="card" style="max-width:70rem;">
+      <div class="card" style="max-width:70rem;margin-bottom:2rem;">
         <div class="section-title">Infrastruktur &amp; Finanzen</div>
         <div class="form-row">
           <div class="form-group">
@@ -148,20 +148,32 @@ export function renderKVStudentView(container, kvId, studentId) {
             </div>
           </div>
         </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Spindkaution BAR (EUR)</label>
+            <input type="number" id="s-spind-kaution-bar" value="${student.spindKautionBar||0}" min="0" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Spindkaution KARTE (EUR)</label>
+            <input type="number" id="s-spind-kaution-karte" value="${student.spindKautionKarte||0}" min="0" step="0.01">
+          </div>
+        </div>
+
         <div class="divider"></div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Schulgeld BAR (EUR)</label>
             <div style="display:flex;gap:0.8rem;">
               <input type="number" id="s-bar" value="${student.schulgeldBar||0}" min="0" step="0.01" style="flex:1;">
-              <button class="btn btn-ghost btn-sm" id="btn-smartfill-bar" title="Standardbetrag uebernehmen">${schulgeldDefault} EUR</button>
+              <button class="btn btn-ghost btn-sm" id="btn-smartfill-bar" title="Standardbetrag uebernehmen" type="button">${schulgeldDefault} EUR</button>
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">Schulgeld KARTE (EUR)</label>
             <div style="display:flex;gap:0.8rem;">
               <input type="number" id="s-karte" value="${student.schulgeldKarte||0}" min="0" step="0.01" style="flex:1;">
-              <button class="btn btn-ghost btn-sm" id="btn-smartfill-karte" title="Standardbetrag uebernehmen">${schulgeldDefault} EUR</button>
+              <button class="btn btn-ghost btn-sm" id="btn-smartfill-karte" title="Standardbetrag uebernehmen" type="button">${schulgeldDefault} EUR</button>
             </div>
           </div>
         </div>
@@ -169,6 +181,65 @@ export function renderKVStudentView(container, kvId, studentId) {
           <span style="font-weight:600;color:var(--text-secondary);">Summe Schulgeld</span>
           <span id="s-summe" style="font-size:2.4rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:${summe>0?"var(--grade-1)":"var(--grade-5)"};">${summe.toFixed(2)} EUR</span>
         </div>
+      </div>
+
+      <!-- Sonderprojekte & Exkursionen -->
+      <div class="card" style="max-width:70rem;">
+        <div class="section-title">🎒 Exkursionen &amp; Sonderprojekte</div>
+        
+        ${(kv?.projekte || []).length === 0 
+          ? `<p style="color:var(--text-muted);font-size:1.15rem;padding:1rem;">Für diese Klasse sind keine Sonderprojekte angelegt.</p>`
+          : `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Projekt</th>
+                    <th class="col-center">Soll-Beitrag</th>
+                    <th class="col-center">Eingezahlt (EUR)</th>
+                    <th class="col-center">Zahlungsart</th>
+                    <th class="col-center">Guthaben / Rückzahlung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(kv.projekte || []).map(p => {
+                    const pay = (student.projektZahlungen || {})[p.id] || { betrag: 0, methode: "bar" };
+                    const studentsAll = getKVStudents(kvId);
+                    const allPayments = studentsAll.map(st => (st.projektZahlungen || {})[p.id] || { betrag: 0 });
+                    const totalCollected = allPayments.reduce((sum, py) => sum + py.betrag, 0);
+                    const payerCount = allPayments.filter(py => py.betrag > 0).length;
+                    
+                    const refundPerStudent = payerCount > 0 && totalCollected > p.tatsaechlicheKosten
+                      ? (totalCollected - p.tatsaechlicheKosten) / payerCount
+                      : 0;
+
+                    const hasPaid = pay.betrag > 0;
+                    const individualRefund = hasPaid ? refundPerStudent : 0;
+
+                    return `
+                      <tr class="student-project-payment-row" data-project-id="${p.id}">
+                        <td style="font-weight:600;">${escHtml(p.name)}</td>
+                        <td class="col-center">${p.sollProSchueler.toFixed(2)} EUR</td>
+                        <td class="col-center">
+                          <input type="number" class="student-project-payment-input" data-project-id="${p.id}" value="${pay.betrag || ""}" placeholder="0.00" style="width:90px;text-align:center;padding:4px;">
+                        </td>
+                        <td class="col-center">
+                          <select class="student-project-method-select" data-project-id="${p.id}" style="padding:4px;">
+                            <option value="bar" ${pay.methode === "bar" ? "selected" : ""}>Bar 💵</option>
+                            <option value="karte" ${pay.methode === "karte" ? "selected" : ""}>Bankomat 💳</option>
+                          </select>
+                        </td>
+                        <td class="col-center" style="font-weight:600;color:${individualRefund > 0 ? "var(--accent)" : "var(--text-muted)"};">
+                          ${individualRefund > 0 ? `${individualRefund.toFixed(2)} EUR` : "–"}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `
+        }
       </div>
     </div>
 
@@ -337,6 +408,11 @@ export function renderKVStudentView(container, kvId, studentId) {
     const schloss = document.getElementById("s-schloss")?.checked||false;
     const bar = parseFloat(document.getElementById("s-bar")?.value)||0;
     const karte = parseFloat(document.getElementById("s-karte")?.value)||0;
+    
+    // Spindkaution
+    const spindKautionBar = parseFloat(document.getElementById("s-spind-kaution-bar")?.value)||0;
+    const spindKautionKarte = parseFloat(document.getElementById("s-spind-kaution-karte")?.value)||0;
+
     const raucher = document.getElementById("s-raucher")?.checked||false;
     const lap = document.getElementById("s-lap")?.checked||false;
     const relSelect = document.getElementById("s-religion")?.value||"";
@@ -346,13 +422,29 @@ export function renderKVStudentView(container, kvId, studentId) {
     const kommentar = document.getElementById("s-kommentar")?.value||"";
     const schulNr = document.getElementById("s-schulnr")?.value.trim()||"";
     if(!nn||!vn) return showToast("Nachname und Vorname erforderlich","error");
+    
+    // 1. Update Student standard & infrastructure fields
     updateStudent(studentId, {
       nachname:nn, vorname:vn, firstName:vn, lastName:nn, geburtsdatum:geb,
       schulNr,
       spindNr: spind!==null&&spind!==""?parseInt(spind):null,
+      spindKautionBar, spindKautionKarte,
       schlossBezahlt:schloss, schulgeldBar:bar, schulgeldKarte:karte,
       raucher, vorerhebungLAP:lap, religion, befreiungen, kommentar
     });
+
+    // 2. Collect and save all custom project payments from inputs
+    container.querySelectorAll(".student-project-payment-row").forEach(row => {
+      const pId = row.dataset.projectId;
+      const payInp = row.querySelector(".student-project-payment-input");
+      const methodSel = row.querySelector(".student-project-method-select");
+      if (payInp && methodSel) {
+        const val = payInp.value;
+        const method = methodSel.value;
+        updateProjectPayment(studentId, pId, val, method);
+      }
+    });
+
     showToast("Gespeichert","success");
     // Refresh display
     renderKVStudentView(container, kvId, studentId);

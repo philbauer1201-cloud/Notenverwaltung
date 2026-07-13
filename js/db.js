@@ -739,3 +739,81 @@ export function deleteKVChecklist(kvId, checklistId) {
   kv.checklists = (kv.checklists || []).filter(c => c.id !== checklistId);
   saveDB();
 }
+
+// ── KV Klassenkasse / Finanzen ──────────────────────────────────
+export function addKVClassProject(kvId, name, sollProSchueler, tatsaechlicheKosten) {
+  const db = getDB();
+  const kv = db.kvClasses.find(c => c.id === kvId);
+  if (!kv) return null;
+  if (!kv.projekte) kv.projekte = [];
+  const proj = {
+    id: uid(),
+    name,
+    sollProSchueler: parseFloat(sollProSchueler) || 0,
+    tatsaechlicheKosten: parseFloat(tatsaechlicheKosten) || 0
+  };
+  kv.projekte.push(proj);
+  saveDB();
+  return proj;
+}
+
+export function updateKVClassProject(kvId, projectId, name, sollProSchueler, tatsaechlicheKosten) {
+  const db = getDB();
+  const kv = db.kvClasses.find(c => c.id === kvId);
+  if (!kv) return null;
+  const proj = (kv.projekte || []).find(p => p.id === projectId);
+  if (!proj) return null;
+  proj.name = name;
+  proj.sollProSchueler = parseFloat(sollProSchueler) || 0;
+  proj.tatsaechlicheKosten = parseFloat(tatsaechlicheKosten) || 0;
+  saveDB();
+  return proj;
+}
+
+export function deleteKVClassProject(kvId, projectId) {
+  const db = getDB();
+  const kv = db.kvClasses.find(c => c.id === kvId);
+  if (!kv) return;
+  kv.projekte = (kv.projekte || []).filter(p => p.id !== projectId);
+  
+  // Clean up all student payments for this project
+  (db.students || []).forEach(s => {
+    if (s.projektZahlungen && s.projektZahlungen[projectId]) {
+      delete s.projektZahlungen[projectId];
+    }
+  });
+
+  saveDB();
+}
+
+export function updateProjectPayment(studentId, projectId, payedAmount, method) {
+  const db = getDB();
+  const s = db.students.find(st => st.id === studentId);
+  if (!s) return;
+  if (!s.projektZahlungen) s.projektZahlungen = {};
+  
+  if (payedAmount === null || payedAmount === undefined || payedAmount === "") {
+    delete s.projektZahlungen[projectId];
+  } else {
+    s.projektZahlungen[projectId] = {
+      betrag: parseFloat(payedAmount) || 0,
+      methode: method || 'bar' // 'bar' or 'karte'
+    };
+  }
+  saveDB();
+}
+
+export function updateStudentKVFinance(studentId, fields) {
+  const db = getDB();
+  const s = db.students.find(st => st.id === studentId);
+  if (!s) return;
+  
+  if (fields.schulgeldBar !== undefined) s.schulgeldBar = parseFloat(fields.schulgeldBar) || 0;
+  if (fields.schulgeldKarte !== undefined) s.schulgeldKarte = parseFloat(fields.schulgeldKarte) || 0;
+  if (fields.spindNr !== undefined) s.spindNr = fields.spindNr;
+  if (fields.spindKautionBar !== undefined) s.spindKautionBar = parseFloat(fields.spindKautionBar) || 0;
+  if (fields.spindKautionKarte !== undefined) s.spindKautionKarte = parseFloat(fields.spindKautionKarte) || 0;
+
+  saveDB();
+}
+

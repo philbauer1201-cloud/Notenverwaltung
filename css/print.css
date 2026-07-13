@@ -156,6 +156,12 @@
     color: #555;
     font-style: italic;
   }
+
+  /* Custom Cashbox project printing elements */
+  .summary-box { display: flex !important; gap: 15px; margin-bottom: 20px; }
+  .sum-card { border: 1px solid #000 !important; padding: 10px; flex: 1; border-radius: 4px; }
+  .sum-val { font-size: 13pt; font-weight: bold; }
+  .sig-col { width: 150px; }
 }
 
 /* Hide print elements on screen */
