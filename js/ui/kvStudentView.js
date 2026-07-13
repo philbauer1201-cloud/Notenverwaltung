@@ -213,7 +213,7 @@ export function renderKVStudentView(container, kvId, studentId) {
                     const totalCollected = allPayments.reduce((sum, py) => sum + py.betrag, 0);
                     const payerCount = allPayments.filter(py => py.betrag > 0).length;
                     
-                    const refundPerStudent = payerCount > 0 && totalCollected > p.tatsaechlicheKosten
+                    const refundPerStudent = payerCount > 0 && p.tatsaechlicheKosten > 0 && totalCollected > p.tatsaechlicheKosten
                       ? (totalCollected - p.tatsaechlicheKosten) / payerCount
                       : 0;
 

@@ -359,7 +359,7 @@ function renderContent(container, kvId, state) {
             });
             const totalCollected = payments.reduce((sum, py) => sum + py.betrag, 0);
             const payerCount = payments.filter(py => py.betrag > 0).length;
-            const refundPerStudent = payerCount > 0 && totalCollected > p.tatsaechlicheKosten
+            const refundPerStudent = payerCount > 0 && p.tatsaechlicheKosten > 0 && totalCollected > p.tatsaechlicheKosten
               ? (totalCollected - p.tatsaechlicheKosten) / payerCount
               : 0;
 
@@ -1209,7 +1209,7 @@ function printProjectAbrechnung(kvId, kv, project, students) {
   });
   const totalCollected = payments.reduce((sum, py) => sum + py.betrag, 0);
   const payerCount = payments.filter(py => py.betrag > 0).length;
-  const refundPerStudent = payerCount > 0 && totalCollected > project.tatsaechlicheKosten
+  const refundPerStudent = payerCount > 0 && project.tatsaechlicheKosten > 0 && totalCollected > project.tatsaechlicheKosten
     ? (totalCollected - project.tatsaechlicheKosten) / payerCount
     : 0;
 
