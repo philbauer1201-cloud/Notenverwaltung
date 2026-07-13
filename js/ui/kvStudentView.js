@@ -4,7 +4,7 @@
  */
 import {
   getKVClass, getGlobalStudents, updateStudent, calculateAge, isEigenberechtigt, getSetting,
-  getKVStudents
+  getKVStudents, updateProjectPayment
 } from "../db.js";
 import { navigate, showToast } from "../app.js";
 
