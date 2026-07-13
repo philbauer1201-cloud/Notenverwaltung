@@ -84,10 +84,10 @@ function renderContent(container, kvId, state) {
   // Finance filter
   switch(state.financeFilter) {
     case "open_payment":
-      students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)===0);
+      students = students.filter(s => (s.schulgeldBetrag||0)===0);
       break;
     case "paid_payment":
-      students = students.filter(s => (s.schulgeldBar||0)+(s.schulgeldKarte||0)>0);
+      students = students.filter(s => (s.schulgeldBetrag||0)>0);
       break;
     case "schloss_paid":
       students = students.filter(s => s.schlossBezahlt);
@@ -271,12 +271,12 @@ function renderContent(container, kvId, state) {
   } else {
     // ─── TAB: KLASSENKASSE ───
     // Calculate global metrics
-    const totalSchulgeldBar = all.reduce((sum, s) => sum + (s.schulgeldBar || 0), 0);
-    const totalSchulgeldKarte = all.reduce((sum, s) => sum + (s.schulgeldKarte || 0), 0);
+    const totalSchulgeldBar = all.reduce((sum, s) => sum + (s.schulgeldMethode === 'bar' ? (s.schulgeldBetrag || 0) : 0), 0);
+    const totalSchulgeldKarte = all.reduce((sum, s) => sum + (s.schulgeldMethode === 'karte' ? (s.schulgeldBetrag || 0) : 0), 0);
     const totalSchulgeld = totalSchulgeldBar + totalSchulgeldKarte;
 
-    const totalSpindBar = all.reduce((sum, s) => sum + (s.spindKautionBar || 0), 0);
-    const totalSpindKarte = all.reduce((sum, s) => sum + (s.spindKautionKarte || 0), 0);
+    const totalSpindBar = all.reduce((sum, s) => sum + (s.spindKautionMethode === 'bar' ? (s.spindKautionBetrag || 0) : 0), 0);
+    const totalSpindKarte = all.reduce((sum, s) => sum + (s.spindKautionMethode === 'karte' ? (s.spindKautionBetrag || 0) : 0), 0);
     const totalSpind = totalSpindBar + totalSpindKarte;
 
     const projects = kv.projekte || [];
@@ -1052,14 +1052,14 @@ function printKVFiltered(kv, students, cols, docsToPrint = []) {
   ].filter(Boolean).join("");
 
   const rows = students.map(s => {
-    const summe = (s.schulgeldBar||0)+(s.schulgeldKarte||0);
+    const summe = s.schulgeldBetrag || 0;
     const age = calculateAge(s.geburtsdatum);
     const ue18 = isEigenberechtigt(s.geburtsdatum);
     return "<tr>"+ [
       has("name")      && `<td><strong>${escHtml(s.nachname||s.lastName)}</strong></td><td>${escHtml(s.vorname||s.firstName)}</td><td>${s.geburtsdatum?new Date(s.geburtsdatum).toLocaleDateString("de-AT"):"-"}</td>`,
       has("alter")     && `<td>${age!==null?age:"-"}</td><td>${ue18?"J":"N"}</td>`,
       has("spind")     && `<td>${s.spindNr??"-"}</td>`,
-      has("schulgeld") && `<td>${s.schulgeldBar||0}</td><td>${s.schulgeldKarte||0}</td><td>${summe>0?summe+" EUR":"Offen"}</td>`,
+      has("schulgeld") && `<td>${s.schulgeldMethode==='bar'?summe.toFixed(2):"0.00"}</td><td>${s.schulgeldMethode==='karte'?summe.toFixed(2):"0.00"}</td><td>${summe>0?summe.toFixed(2)+" EUR":"Offen"}</td>`,
       docsToPrint.map(k=>`<td>${ds[(s.dokumente||{})[k]]||"[ ]"}</td>`).join(""),
       has("raucher")   && `<td>${s.raucher?"Ja":"Nein"}</td>`,
       has("religion")  && `<td>${escHtml(s.religion||"")}</td>`,
@@ -1099,13 +1099,13 @@ function exportCSVFiltered(kvId, kv, students, cols, docsToPrint = []) {
   ].filter(Boolean).flat();
 
   const rows = [headers, ...students.map(s => {
-    const summe = (s.schulgeldBar||0)+(s.schulgeldKarte||0);
+    const summe = s.schulgeldBetrag || 0;
     const age = calculateAge(s.geburtsdatum);
     return [
       has("name")      && [s.nachname||s.lastName, s.vorname||s.firstName, s.geburtsdatum||""],
       has("alter")     && [age!==null?age:"", isEigenberechtigt(s.geburtsdatum)?"Ja":"Nein"],
       has("spind")     && [s.spindNr??""],
-      has("schulgeld") && [s.schulgeldBar||0, s.schulgeldKarte||0, summe],
+      has("schulgeld") && [s.schulgeldMethode==='bar'?summe:0, s.schulgeldMethode==='karte'?summe:0, summe],
       docsToPrint.map(k=>ds[(s.dokumente||{})[k]]||"Offen"),
       has("raucher")   && [s.raucher?"Ja":"Nein"],
       has("religion")  && [s.religion||""],
@@ -1123,12 +1123,12 @@ function exportCSVFiltered(kvId, kv, students, cols, docsToPrint = []) {
 }
 
 function printSchulgemeindeAbrechnung(kvId, kv, students) {
-  const totalSchulgeldBar = students.reduce((sum, s) => sum + (s.schulgeldBar || 0), 0);
-  const totalSchulgeldKarte = students.reduce((sum, s) => sum + (s.schulgeldKarte || 0), 0);
+  const totalSchulgeldBar = students.reduce((sum, s) => sum + (s.schulgeldMethode === 'bar' ? (s.schulgeldBetrag || 0) : 0), 0);
+  const totalSchulgeldKarte = students.reduce((sum, s) => sum + (s.schulgeldMethode === 'karte' ? (s.schulgeldBetrag || 0) : 0), 0);
   const totalSchulgeld = totalSchulgeldBar + totalSchulgeldKarte;
 
-  const totalSpindBar = students.reduce((sum, s) => sum + (s.spindKautionBar || 0), 0);
-  const totalSpindKarte = students.reduce((sum, s) => sum + (s.spindKautionKarte || 0), 0);
+  const totalSpindBar = students.reduce((sum, s) => sum + (s.spindKautionMethode === 'bar' ? (s.spindKautionBetrag || 0) : 0), 0);
+  const totalSpindKarte = students.reduce((sum, s) => sum + (s.spindKautionMethode === 'karte' ? (s.spindKautionBetrag || 0) : 0), 0);
   const totalSpind = totalSpindBar + totalSpindKarte;
 
   const w = window.open("", "_blank");

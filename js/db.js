@@ -15,8 +15,10 @@ function kvStudentDefaults() {
     // Infrastruktur & Finanzen
     spindNr: null,
     schlossBezahlt: false,
-    schulgeldBar: 0,
-    schulgeldKarte: 0,
+    schulgeldBetrag: 0,
+    schulgeldMethode: 'bar',
+    spindKautionBetrag: 0,
+    spindKautionMethode: 'bar',
     // Dokumente (0=Offen, 1=Erledigt, 2=Nicht erforderlich)
     dokumente: {
       kaliumJodid: 0,
@@ -165,6 +167,40 @@ function migrateData(data) {
         studentChanged = true;
       }
     });
+
+    // Migrate old finance fields if they exist
+    if (s.schulgeldBar !== undefined || s.schulgeldKarte !== undefined) {
+      const sBar = parseFloat(s.schulgeldBar) || 0;
+      const sKarte = parseFloat(s.schulgeldKarte) || 0;
+      if (sBar > 0) {
+        s.schulgeldBetrag = sBar;
+        s.schulgeldMethode = 'bar';
+        studentChanged = true;
+      } else if (sKarte > 0) {
+        s.schulgeldBetrag = sKarte;
+        s.schulgeldMethode = 'karte';
+        studentChanged = true;
+      }
+      delete s.schulgeldBar;
+      delete s.schulgeldKarte;
+    }
+
+    if (s.spindKautionBar !== undefined || s.spindKautionKarte !== undefined) {
+      const kBar = parseFloat(s.spindKautionBar) || 0;
+      const kKarte = parseFloat(s.spindKautionKarte) || 0;
+      if (kBar > 0) {
+        s.spindKautionBetrag = kBar;
+        s.spindKautionMethode = 'bar';
+        studentChanged = true;
+      } else if (kKarte > 0) {
+        s.spindKautionBetrag = kKarte;
+        s.spindKautionMethode = 'karte';
+        studentChanged = true;
+      }
+      delete s.spindKautionBar;
+      delete s.spindKautionKarte;
+    }
+
     if (!s.dokumente) { s.dokumente = { ...defaults.dokumente }; studentChanged = true; }
     // Fill in missing dokument keys
     Object.keys(defaults.dokumente).forEach(dk => {
@@ -808,11 +844,11 @@ export function updateStudentKVFinance(studentId, fields) {
   const s = db.students.find(st => st.id === studentId);
   if (!s) return;
   
-  if (fields.schulgeldBar !== undefined) s.schulgeldBar = parseFloat(fields.schulgeldBar) || 0;
-  if (fields.schulgeldKarte !== undefined) s.schulgeldKarte = parseFloat(fields.schulgeldKarte) || 0;
+  if (fields.schulgeldBetrag !== undefined) s.schulgeldBetrag = parseFloat(fields.schulgeldBetrag) || 0;
+  if (fields.schulgeldMethode !== undefined) s.schulgeldMethode = fields.schulgeldMethode || 'bar';
   if (fields.spindNr !== undefined) s.spindNr = fields.spindNr;
-  if (fields.spindKautionBar !== undefined) s.spindKautionBar = parseFloat(fields.spindKautionBar) || 0;
-  if (fields.spindKautionKarte !== undefined) s.spindKautionKarte = parseFloat(fields.spindKautionKarte) || 0;
+  if (fields.spindKautionBetrag !== undefined) s.spindKautionBetrag = parseFloat(fields.spindKautionBetrag) || 0;
+  if (fields.spindKautionMethode !== undefined) s.spindKautionMethode = fields.spindKautionMethode || 'bar';
 
   saveDB();
 }

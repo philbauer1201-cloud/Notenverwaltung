@@ -151,30 +151,33 @@ export function renderKVStudentView(container, kvId, studentId) {
         
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Spindkaution BAR (EUR)</label>
-            <input type="number" id="s-spind-kaution-bar" value="${student.spindKautionBar||0}" min="0" step="0.01">
+            <label class="form-label">Spindkaution Betrag (EUR)</label>
+            <input type="number" id="s-spind-kaution-betrag" value="${student.spindKautionBetrag||0}" min="0" step="0.01">
           </div>
           <div class="form-group">
-            <label class="form-label">Spindkaution KARTE (EUR)</label>
-            <input type="number" id="s-spind-kaution-karte" value="${student.spindKautionKarte||0}" min="0" step="0.01">
+            <label class="form-label">Zahlungsart Kaution</label>
+            <select id="s-spind-kaution-methode" style="width:100%;padding:0.9rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+              <option value="bar" ${student.spindKautionMethode === "bar" ? "selected" : ""}>Bar 💵</option>
+              <option value="karte" ${student.spindKautionMethode === "karte" ? "selected" : ""}>Bankomat 💳</option>
+            </select>
           </div>
         </div>
 
         <div class="divider"></div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Schulgeld BAR (EUR)</label>
+            <label class="form-label">Schulgeld Betrag (EUR)</label>
             <div style="display:flex;gap:0.8rem;">
-              <input type="number" id="s-bar" value="${student.schulgeldBar||0}" min="0" step="0.01" style="flex:1;">
-              <button class="btn btn-ghost btn-sm" id="btn-smartfill-bar" title="Standardbetrag uebernehmen" type="button">${schulgeldDefault} EUR</button>
+              <input type="number" id="s-schulgeld-betrag" value="${student.schulgeldBetrag||0}" min="0" step="0.01" style="flex:1;">
+              <button class="btn btn-ghost btn-sm" id="btn-smartfill-schulgeld" title="Standardbetrag uebernehmen" type="button">${schulgeldDefault} EUR</button>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Schulgeld KARTE (EUR)</label>
-            <div style="display:flex;gap:0.8rem;">
-              <input type="number" id="s-karte" value="${student.schulgeldKarte||0}" min="0" step="0.01" style="flex:1;">
-              <button class="btn btn-ghost btn-sm" id="btn-smartfill-karte" title="Standardbetrag uebernehmen" type="button">${schulgeldDefault} EUR</button>
-            </div>
+            <label class="form-label">Zahlungsart Schulgeld</label>
+            <select id="s-schulgeld-methode" style="width:100%;padding:0.9rem 1.2rem;background:var(--bg-input);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--text-primary);">
+              <option value="bar" ${student.schulgeldMethode === "bar" ? "selected" : ""}>Bar 💵</option>
+              <option value="karte" ${student.schulgeldMethode === "karte" ? "selected" : ""}>Bankomat 💳</option>
+            </select>
           </div>
         </div>
         <div style="padding:1.4rem 2rem;background:var(--bg-card-2);border-radius:var(--r-md);border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
@@ -343,25 +346,18 @@ export function renderKVStudentView(container, kvId, studentId) {
   });
 
   // SmartFill buttons
-  container.querySelector("#btn-smartfill-bar")?.addEventListener("click", () => {
-    document.getElementById("s-bar").value = schulgeldDefault;
-    updateSumme();
-  });
-  container.querySelector("#btn-smartfill-karte")?.addEventListener("click", () => {
-    document.getElementById("s-karte").value = schulgeldDefault;
+  container.querySelector("#btn-smartfill-schulgeld")?.addEventListener("click", () => {
+    document.getElementById("s-schulgeld-betrag").value = schulgeldDefault;
     updateSumme();
   });
 
   // Live summe
   function updateSumme() {
-    const bar = parseFloat(document.getElementById("s-bar")?.value)||0;
-    const karte = parseFloat(document.getElementById("s-karte")?.value)||0;
-    const s = bar+karte;
+    const s = parseFloat(document.getElementById("s-schulgeld-betrag")?.value)||0;
     const el = container.querySelector("#s-summe");
     if(el){ el.textContent = s.toFixed(2)+" EUR"; el.style.color = s>0?"var(--grade-1)":"var(--grade-5)"; }
   }
-  container.querySelector("#s-bar")?.addEventListener("input", updateSumme);
-  container.querySelector("#s-karte")?.addEventListener("input", updateSumme);
+  container.querySelector("#s-schulgeld-betrag")?.addEventListener("input", updateSumme);
 
   // Raucher toggle label
   container.querySelector("#s-raucher")?.addEventListener("change", e => {
@@ -406,12 +402,12 @@ export function renderKVStudentView(container, kvId, studentId) {
     const geb = document.getElementById("s-geb")?.value||"";
     const spind = document.getElementById("s-spind")?.value;
     const schloss = document.getElementById("s-schloss")?.checked||false;
-    const bar = parseFloat(document.getElementById("s-bar")?.value)||0;
-    const karte = parseFloat(document.getElementById("s-karte")?.value)||0;
     
-    // Spindkaution
-    const spindKautionBar = parseFloat(document.getElementById("s-spind-kaution-bar")?.value)||0;
-    const spindKautionKarte = parseFloat(document.getElementById("s-spind-kaution-karte")?.value)||0;
+    // Schulgeld & Kaution
+    const schulgeldBetrag = parseFloat(document.getElementById("s-schulgeld-betrag")?.value)||0;
+    const schulgeldMethode = document.getElementById("s-schulgeld-methode")?.value||"bar";
+    const spindKautionBetrag = parseFloat(document.getElementById("s-spind-kaution-betrag")?.value)||0;
+    const spindKautionMethode = document.getElementById("s-spind-kaution-methode")?.value||"bar";
 
     const raucher = document.getElementById("s-raucher")?.checked||false;
     const lap = document.getElementById("s-lap")?.checked||false;
@@ -428,8 +424,8 @@ export function renderKVStudentView(container, kvId, studentId) {
       nachname:nn, vorname:vn, firstName:vn, lastName:nn, geburtsdatum:geb,
       schulNr,
       spindNr: spind!==null&&spind!==""?parseInt(spind):null,
-      spindKautionBar, spindKautionKarte,
-      schlossBezahlt:schloss, schulgeldBar:bar, schulgeldKarte:karte,
+      spindKautionBetrag, spindKautionMethode,
+      schlossBezahlt:schloss, schulgeldBetrag, schulgeldMethode,
       raucher, vorerhebungLAP:lap, religion, befreiungen, kommentar
     });
 
