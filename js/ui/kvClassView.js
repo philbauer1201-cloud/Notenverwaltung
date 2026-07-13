@@ -670,6 +670,7 @@ function renderContent(container, kvId, state) {
       });
     });
   }
+}
 
 
 // ── Document Checklist Filter Modal ────────────────────────────────
