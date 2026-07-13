@@ -474,11 +474,9 @@ function renderContent(container, kvId, state) {
       const inp = container.querySelector("#kv-search");
       if (inp) { inp.focus(); try { inp.setSelectionRange(sel[0], sel[1]); } catch(_){} }
     });
-
-    const inp = container.querySelector("#kv-search");
-    if (inp) { inp.focus(); try { inp.setSelectionRange(sel[0], sel[1]); } catch(_){} }
-    
-    container.querySelector("#kv-filter-finance")?.addEventListener("change", e => {
+  }
+  
+  container.querySelector("#kv-filter-finance")?.addEventListener("change", e => {
       renderContent(container, kvId, {...state, financeFilter: e.target.value});
     });
 
