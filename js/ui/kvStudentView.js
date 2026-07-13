@@ -3,7 +3,8 @@
  * 4 Tabs: Stammdaten / Finanzen / Dokumente / Zusatz
  */
 import {
-  getKVClass, getGlobalStudents, updateStudent, calculateAge, isEigenberechtigt, getSetting
+  getKVClass, getGlobalStudents, updateStudent, calculateAge, isEigenberechtigt, getSetting,
+  getKVStudents
 } from "../db.js";
 import { navigate, showToast } from "../app.js";
 
