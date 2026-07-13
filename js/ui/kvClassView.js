@@ -406,6 +406,7 @@ function renderContent(container, kvId, state) {
                         <th class="col-center">Eingezahlter Betrag</th>
                         <th class="col-center">Zahlungsart</th>
                         <th class="col-center">Guthaben / Rückzahlung</th>
+                        <th class="col-center">Beleg</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -429,6 +430,9 @@ function renderContent(container, kvId, state) {
                             </td>
                             <td class="col-center" style="font-weight:600;color:${individualRefund > 0 ? "var(--accent)" : "var(--text-muted)"};">
                               ${individualRefund > 0 ? `${individualRefund.toFixed(2)} EUR` : "–"}
+                            </td>
+                            <td class="col-center">
+                              <button class="btn btn-ghost btn-sm btn-print-student-project-receipt" data-student-id="${py.student.id}" data-project-id="${p.id}" title="Einzelbeleg drucken">🖨️</button>
                             </td>
                           </tr>
                         `;
@@ -666,6 +670,19 @@ function renderContent(container, kvId, state) {
         const proj = kv.projekte?.find(p => p.id === pId);
         if (proj) {
           printProjectAbrechnung(kvId, kv, proj, all);
+        }
+      });
+    });
+
+    // Print single student project receipt
+    container.querySelectorAll(".btn-print-student-project-receipt").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const sId = btn.dataset.studentId;
+        const pId = btn.dataset.projectId;
+        const student = all.find(st => st.id === sId);
+        const proj = kv.projekte?.find(p => p.id === pId);
+        if (student && proj) {
+          printSingleStudentProjectReceipt(kv, proj, student, all);
         }
       });
     });
@@ -1281,6 +1298,100 @@ function printProjectAbrechnung(kvId, kv, project, students) {
 
       <div style="margin-top:40px;font-size:9pt;text-align:right;">
         Klassenvorstand (Unterschrift): ___________________________
+      </div>
+    </body>
+    </html>
+  `);
+  w.document.close();
+  w.print();
+}
+
+function printSingleStudentProjectReceipt(kv, project, student, allStudents) {
+  const pay = (student.projektZahlungen || {})[project.id] || { betrag: 0, methode: "bar" };
+  const hasPaid = pay.betrag > 0;
+  const methodenLabels = { bar: "Bar 💵", karte: "Bankomat 💳" };
+
+  // Calculate project refund
+  const allPayments = allStudents.map(st => (st.projektZahlungen || {})[project.id] || { betrag: 0 });
+  const totalCollected = allPayments.reduce((sum, py) => sum + py.betrag, 0);
+  const payerCount = allPayments.filter(py => py.betrag > 0).length;
+  const refundPerStudent = payerCount > 0 && project.tatsaechlicheKosten > 0 && totalCollected > project.tatsaechlicheKosten
+    ? (totalCollected - project.tatsaechlicheKosten) / payerCount
+    : 0;
+
+  const refund = hasPaid ? refundPerStudent : 0;
+
+  const w = window.open("", "_blank");
+  w.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Einzelbeleg - ${escHtml(project.name)} - ${escHtml(student.nachname || student.lastName)}</title>
+      <style>
+        body { font-family: 'Inter', Arial, sans-serif; font-size: 10pt; color: #000; padding: 1.5cm; line-height: 1.4; }
+        h1 { font-size: 14pt; margin-bottom: 2px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; }
+        h2 { font-size: 11pt; color: #444; margin-bottom: 20px; font-weight: normal; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; background: #f9f9f9; padding: 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .meta-item { font-size: 9.5pt; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 9pt; }
+        th { background: #f0f0f0; border: 1px solid #000; padding: 6px; font-weight: bold; text-align: left; }
+        td { border: 1px solid #ccc; padding: 6px; }
+        .refund-total-box { border: 1.5px solid #10b981; background: #f0fdf4; padding: 12px; font-size: 11pt; font-weight: bold; text-align: center; border-radius: 4px; margin-bottom: 30px; }
+        .footer-sig { margin-top: 50px; display: flex; justify-content: space-between; }
+        .sig-box { width: 220px; border-top: 1px solid #000; text-align: center; padding-top: 6px; font-size: 8.5pt; }
+      </style>
+    </head>
+    <body>
+      <h1>Abrechnungsbeleg / Quittung</h1>
+      <h2>Projekt: <strong>${escHtml(project.name)}</strong> &bull; Klasse: ${escHtml(kv.name)}</h2>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <strong>Schüler/in:</strong><br>
+          <span style="font-size:11pt;font-weight:bold;">${escHtml(student.nachname || student.lastName)}, ${escHtml(student.vorname || student.firstName)}</span>
+        </div>
+        <div class="meta-item" style="text-align:right;">
+          <strong>Datum:</strong><br>
+          ${new Date().toLocaleDateString("de-AT")}
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Posten</th>
+            <th>Soll-Beitrag</th>
+            <th>Eingezahlter Betrag</th>
+            <th>Guthaben / Rückzahlung</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Projektkosten (${escHtml(project.name)})</strong></td>
+            <td>${project.sollProSchueler.toFixed(2)} EUR</td>
+            <td>${hasPaid ? `${pay.betrag.toFixed(2)} EUR (${methodenLabels[pay.methode] || pay.methode})` : `<span style="color:#666;">Nicht eingezahlt</span>`}</td>
+            <td style="font-weight:bold;color:${refund > 0 ? '#10b981' : '#000'};">
+              ${refund > 0 ? `${refund.toFixed(2)} EUR` : "–"}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Rückzahlungssumme -->
+      <div class="refund-total-box">
+        RÜCKZAHLUNGSBETRAG (GUTHABEN): ${refund.toFixed(2)} EUR
+      </div>
+
+      <div style="font-size:8.5pt;color:#333;margin-top:20px;line-height:1.5;">
+        <strong>Empfangsbestätigung:</strong><br>
+        Hiermit bestätige ich, den oben angeführten Rückzahlungsbetrag in Höhe von 
+        <strong>${refund.toFixed(2)} EUR</strong> ordnungsgemäß in bar erhalten zu haben.
+      </div>
+
+      <div class="footer-sig">
+        <div class="sig-box">Klassenvorstand (Auszahlung)</div>
+        <div class="sig-box">Schüler/in bzw. Erziehungsberechtigte/r (Erhalt)</div>
       </div>
     </body>
     </html>

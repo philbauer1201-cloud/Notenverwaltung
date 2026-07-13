@@ -130,7 +130,10 @@ export function renderKVStudentView(container, kvId, studentId) {
     <!-- Tab: Finanzen -->
     <div class="tab-panel" id="tab-finanzen">
       <div class="card" style="max-width:70rem;margin-bottom:2rem;">
-        <div class="section-title">Infrastruktur &amp; Finanzen</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.6rem;flex-wrap:wrap;gap:1rem;">
+          <div class="section-title" style="margin:0;">Infrastruktur &amp; Finanzen</div>
+          <button class="btn btn-ghost btn-sm" id="btn-print-student-receipt" type="button">🖨️ Einzelbeleg drucken</button>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Spind-Nr.</label>
@@ -446,4 +449,153 @@ export function renderKVStudentView(container, kvId, studentId) {
     // Refresh display
     renderKVStudentView(container, kvId, studentId);
   });
+
+  // Print single student receipt
+  container.querySelector("#btn-print-student-receipt")?.addEventListener("click", () => {
+    printSingleStudentReceipt(kv, student, kv.projekte || []);
+  });
+}
+
+function printSingleStudentReceipt(kv, student, projects) {
+  const escHtml = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const summeSchulgeld = student.schulgeldBetrag || 0;
+  const methodenLabels = { bar: "Bar 💵", karte: "Bankomat 💳" };
+
+  // Calculate project details
+  let totalRefund = 0;
+  const projectRows = projects.map(p => {
+    const pay = (student.projektZahlungen || {})[p.id] || { betrag: 0, methode: "bar" };
+    const hasPaid = pay.betrag > 0;
+    
+    // We need the global refund calculation for this project
+    const allStudents = getKVStudents(kv.id);
+    const allPayments = allStudents.map(st => (st.projektZahlungen || {})[p.id] || { betrag: 0 });
+    const totalCollected = allPayments.reduce((sum, py) => sum + py.betrag, 0);
+    const payerCount = allPayments.filter(py => py.betrag > 0).length;
+    const refundPerStudent = payerCount > 0 && p.tatsaechlicheKosten > 0 && totalCollected > p.tatsaechlicheKosten
+      ? (totalCollected - p.tatsaechlicheKosten) / payerCount
+      : 0;
+
+    const refund = hasPaid ? refundPerStudent : 0;
+    totalRefund += refund;
+
+    return `
+      <tr>
+        <td><strong>${escHtml(p.name)}</strong></td>
+        <td>${p.sollProSchueler.toFixed(2)} EUR</td>
+        <td>${hasPaid ? `${pay.betrag.toFixed(2)} EUR (${methodenLabels[pay.methode] || pay.methode})` : `<span style="color:#666;">Nicht eingezahlt</span>`}</td>
+        <td style="font-weight:bold;color:${refund > 0 ? '#10b981' : '#000'};">
+          ${refund > 0 ? `${refund.toFixed(2)} EUR` : "–"}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const w = window.open("", "_blank");
+  w.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Finanzbeleg - ${escHtml(student.nachname || student.lastName)}, ${escHtml(student.vorname || student.firstName)}</title>
+      <style>
+        body { font-family: 'Inter', Arial, sans-serif; font-size: 10pt; color: #000; padding: 1.5cm; line-height: 1.4; }
+        h1 { font-size: 14pt; margin-bottom: 2px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; }
+        h2 { font-size: 11pt; color: #444; margin-bottom: 20px; font-weight: normal; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; background: #f9f9f9; padding: 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .meta-item { font-size: 9.5pt; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 9pt; }
+        th { background: #f0f0f0; border: 1px solid #000; padding: 6px; font-weight: bold; text-align: left; }
+        td { border: 1px solid #ccc; padding: 6px; }
+        .section-title { font-size: 11pt; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .refund-total-box { border: 1.5px solid #10b981; background: #f0fdf4; padding: 12px; font-size: 11pt; font-weight: bold; text-align: center; border-radius: 4px; margin-bottom: 30px; }
+        .footer-sig { margin-top: 50px; display: flex; justify-content: space-between; }
+        .sig-box { width: 220px; border-top: 1px solid #000; text-align: center; padding-top: 6px; font-size: 8.5pt; }
+      </style>
+    </head>
+    <body>
+      <h1>Finanzbeleg & Quittung</h1>
+      <h2>Klasse: ${escHtml(kv.name)} &bull; Stand: ${new Date().toLocaleDateString("de-AT")}</h2>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <strong>Schüler/in:</strong><br>
+          <span style="font-size:11pt;font-weight:bold;">${escHtml(student.nachname || student.lastName)}, ${escHtml(student.vorname || student.firstName)}</span>
+        </div>
+        <div class="meta-item" style="text-align:right;">
+          <strong>Klassenvorstand:</strong><br>
+          ___________________________
+        </div>
+      </div>
+
+      <!-- Bereich 1: Fixe Einnahmen -->
+      <div class="section-title">🔒 Fixe Beiträge (Schule & Infrastruktur)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Posten</th>
+            <th>Zahlungsstatus / Betrag</th>
+            <th>Zahlungsart</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Schulgeld (Soll)</strong></td>
+            <td>${summeSchulgeld > 0 ? `${summeSchulgeld.toFixed(2)} EUR` : "Offen"}</td>
+            <td>${summeSchulgeld > 0 ? (methodenLabels[student.schulgeldMethode] || student.schulgeldMethode) : "–"}</td>
+          </tr>
+          <tr>
+            <td><strong>Spindkaution</strong></td>
+            <td>${(student.spindKautionBetrag || 0) > 0 ? `${student.spindKautionBetrag.toFixed(2)} EUR` : "Offen"}</td>
+            <td>${(student.spindKautionBetrag || 0) > 0 ? (methodenLabels[student.spindKautionMethode] || student.spindKautionMethode) : "–"}</td>
+          </tr>
+          <tr>
+            <td><strong>Spindschloss</strong></td>
+            <td>${student.schlossBezahlt ? "Bezahlt (5.00 EUR)" : "Offen (0.00 EUR)"}</td>
+            <td>Bar 💵</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Bereich 2: Sonderprojekte -->
+      <div class="section-title">🎒 Exkursionen & Sonderprojekte</div>
+      ${projects.length === 0 
+        ? `<p style="color:#666;font-style:italic;margin-bottom:25px;">Keine Exkursionen oder Sonderprojekte erfasst.</p>`
+        : `
+          <table>
+            <thead>
+              <tr>
+                <th>Projektname</th>
+                <th>Soll-Beitrag</th>
+                <th>Eingezahlt</th>
+                <th>Guthaben / Erstattung</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${projectRows}
+            </tbody>
+          </table>
+        `
+      }
+
+      <!-- Rückzahlungssumme -->
+      <div class="refund-total-box">
+        AUSZAHLUNGSBETRAG (GESAMTERSTATTUNG GUTHABEN): ${totalRefund.toFixed(2)} EUR
+      </div>
+
+      <div style="font-size:8.5pt;color:#333;margin-top:20px;line-height:1.5;">
+        <strong>Empfangsbestätigung:</strong><br>
+        Hiermit bestätige ich, den oben angeführten Auszahlungsbetrag (Gesamterstattung Guthaben) in Höhe von 
+        <strong>${totalRefund.toFixed(2)} EUR</strong> ordnungsgemäß in bar erhalten zu haben.
+      </div>
+
+      <div class="footer-sig">
+        <div class="sig-box">Klassenvorstand (Auszahlung)</div>
+        <div class="sig-box">Schüler/in bzw. Erziehungsberechtigte/r (Erhalt)</div>
+      </div>
+    </body>
+    </html>
+  `);
+  w.document.close();
+  w.print();
 }
